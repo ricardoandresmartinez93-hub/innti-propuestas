@@ -2,6 +2,13 @@
 Fixtures compartidos para pruebas del backend.
 """
 import pytest
+from unittest.mock import MagicMock
+import sys
+
+# Mock dependencies that require system libraries
+sys.modules["weasyprint"] = MagicMock()
+sys.modules["mammoth"] = MagicMock()
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from fastapi.testclient import TestClient

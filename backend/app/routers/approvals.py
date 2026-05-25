@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from app.database import get_db
+from app.models.proposal import Proposal, ProposalStatus
 from app.models.approval import Approval
 from app.schemas.proposal import ApprovalCreate, ApprovalRead
 from app.services.approval_service import (
@@ -25,10 +26,25 @@ def submit_for_review(
     db: Session = Depends(get_db),
     service: ApprovalService = Depends(get_approval_service),
 ):
-    """Envía una propuesta a revisión (primera aprobación: Ángela)."""
+    """Envía una propuesta a revisión (Ángela) o a VP según estado actual."""
     try:
-        proposal = service.submit_for_review(db, proposal_id)
-        return {"message": "Propuesta enviada a revisión", "status": proposal.status}
+        # Si está en DRAFT, va a PENDING_REVIEW
+        # Si está en REVIEWED, va a PENDING_VP
+        proposal = db.query(Proposal).filter(Proposal.id == proposal_id).first()
+        if not proposal:
+             raise HTTPException(status_code=404, detail="Propuesta no encontrada")
+             
+        if proposal.status == ProposalStatus.DRAFT:
+            proposal = service.submit_for_review(db, proposal_id)
+        elif proposal.status == ProposalStatus.REVIEWED:
+            # Transición manual a PENDING_VP
+            proposal.status = ProposalStatus.PENDING_VP
+            db.commit()
+            db.refresh(proposal)
+        else:
+            raise HTTPException(status_code=400, detail=f"No se puede enviar a revisión desde {proposal.status}")
+            
+        return {"message": "Propuesta avanzada en el flujo", "status": proposal.status}
     except ApprovalError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
