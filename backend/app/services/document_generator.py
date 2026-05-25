@@ -4,6 +4,8 @@ Genera propuestas comerciales y anexos técnicos con la estructura estándar de 
 """
 from pathlib import Path
 from typing import List, Optional
+import mammoth
+from weasyprint import HTML
 from docx import Document
 from docx.shared import Inches, Pt, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -240,3 +242,51 @@ class DocumentGenerator:
         path.parent.mkdir(parents=True, exist_ok=True)
         doc.save(str(path))
         return str(path)
+
+    def convert_docx_to_pdf(self, docx_path: str, pdf_path: str) -> str:
+        """
+        Convierte un archivo .docx a PDF usando mammoth para HTML y WeasyPrint para PDF.
+
+        Args:
+            docx_path: Ruta al archivo .docx
+            pdf_path: Ruta donde se guardará el PDF
+
+        Returns:
+            Ruta del PDF generado.
+        """
+        docx_file = Path(docx_path)
+        if not docx_file.exists():
+            raise DocumentGeneratorError(f"El archivo no existe: {docx_path}")
+
+        try:
+            # 1. Convertir DOCX a HTML usando mammoth
+            with open(docx_path, "rb") as docx_f:
+                result = mammoth.convert_to_html(docx_f)
+                html_content = result.value
+                # result.messages contiene advertencias si las hay
+
+            # 2. Generar PDF desde HTML usando WeasyPrint
+            # Añadimos un poco de CSS básico para que se vea mejor
+            styled_html = f"""
+            <html>
+                <head>
+                    <style>
+                        body {{ font-family: 'Calibri', sans-serif; line-height: 1.5; }}
+                        h1 {{ color: #000; text-align: center; }}
+                        table {{ border-collapse: collapse; width: 100%; }}
+                        table, th, td {{ border: 1px solid black; padding: 8px; }}
+                        img {{ max-width: 100%; }}
+                    </style>
+                </head>
+                <body>
+                    {html_content}
+                </body>
+            </html>
+            """
+            
+            HTML(string=styled_html).write_pdf(pdf_path)
+            
+            return str(pdf_path)
+
+        except Exception as e:
+            raise DocumentGeneratorError(f"Error al convertir DOCX a PDF: {str(e)}")

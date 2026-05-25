@@ -10,6 +10,7 @@ alembic==1.13.1
 # Document Generation
 python-docx==1.1.2
 weasyprint==62.3
+mammoth==1.8.0
 
 # AI Integration (Innti via LiteLLM)
 openai==1.35.0
