@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.database import init_db
 from app.routers import portfolio, proposals, approvals, documents, clients
+from app.middleware.error_handler import register_error_handlers
 
 settings = get_settings()
 
@@ -18,6 +19,9 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+# Registrar handlers de errores
+register_error_handlers(app)
 
 # CORS
 app.add_middleware(
