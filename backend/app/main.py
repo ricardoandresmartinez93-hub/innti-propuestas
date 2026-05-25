@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.database import init_db
-from app.routers import portfolio, proposals, approvals, documents
+from app.routers import portfolio, proposals, approvals, documents, clients
 
 settings = get_settings()
 
@@ -33,6 +33,7 @@ app.include_router(portfolio.router)
 app.include_router(proposals.router)
 app.include_router(approvals.router)
 app.include_router(documents.router)
+app.include_router(clients.router)
 
 
 @app.on_event("startup")
