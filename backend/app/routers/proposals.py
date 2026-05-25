@@ -6,10 +6,10 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from app.database import get_db
-from app.models.proposal import Proposal, ProposalProduct, ProposalScheme
+from app.models.proposal import Proposal, ProposalProduct, ProposalScheme, ProposalStatus
 from app.models.client import Client
 from app.schemas.proposal import (
-    ProposalCreate, ProposalRead, ProposalUpdate,
+    ProposalCreate, ProposalRead, ProposalUpdate, ProposalProductCreate, ProposalProductRead
 )
 
 router = APIRouter(prefix="/api/proposals", tags=["Propuestas"])
@@ -119,3 +119,109 @@ def delete_proposal(proposal_id: int, db: Session = Depends(get_db)):
         )
     db.delete(proposal)
     db.commit()
+
+
+@router.post("/{proposal_id}/products", response_model=ProposalProductRead)
+def add_proposal_product(
+    proposal_id: int, data: ProposalProductCreate, db: Session = Depends(get_db)
+):
+    """Agrega un producto a la propuesta."""
+    proposal = db.query(Proposal).filter(Proposal.id == proposal_id).first()
+    if not proposal:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Propuesta {proposal_id} no encontrada",
+        )
+
+    if proposal.status != ProposalStatus.DRAFT:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Solo se pueden agregar productos a propuestas en estado DRAFT",
+        )
+
+    db_product = ProposalProduct(
+        proposal_id=proposal_id,
+        product_name=data.product_name,
+        product_type=data.product_type,
+        description=data.description,
+        category=data.category,
+    )
+    db.add(db_product)
+    db.commit()
+    db.refresh(db_product)
+    return db_product
+
+
+@router.delete("/{proposal_id}/products/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_proposal_product(
+    proposal_id: int, product_id: int, db: Session = Depends(get_db)
+):
+    """Remueve un producto de la propuesta."""
+    proposal = db.query(Proposal).filter(Proposal.id == proposal_id).first()
+    if not proposal:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Propuesta {proposal_id} no encontrada",
+        )
+
+    if proposal.status != ProposalStatus.DRAFT:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Solo se pueden remover productos de propuestas en estado DRAFT",
+        )
+
+    product = db.query(ProposalProduct).filter(
+        ProposalProduct.id == product_id,
+        ProposalProduct.proposal_id == proposal_id
+    ).first()
+
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Producto {product_id} no encontrado en la propuesta {proposal_id}",
+        )
+
+    db.delete(product)
+    db.commit()
+
+
+@router.put("/{proposal_id}/products", response_model=List[ProposalProductRead])
+def replace_proposal_products(
+    proposal_id: int, data: List[ProposalProductCreate], db: Session = Depends(get_db)
+):
+    """Reemplaza todos los productos de la propuesta."""
+    proposal = db.query(Proposal).filter(Proposal.id == proposal_id).first()
+    if not proposal:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Propuesta {proposal_id} no encontrada",
+        )
+
+    if proposal.status != ProposalStatus.DRAFT:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Solo se pueden modificar productos de propuestas en estado DRAFT",
+        )
+
+    # Eliminar productos existentes
+    db.query(ProposalProduct).filter(ProposalProduct.proposal_id == proposal_id).delete()
+
+    # Agregar nuevos productos
+    new_products = []
+    for item in data:
+        db_product = ProposalProduct(
+            proposal_id=proposal_id,
+            product_name=item.product_name,
+            product_type=item.product_type,
+            description=item.description,
+            category=item.category,
+        )
+        db.add(db_product)
+        new_products.append(db_product)
+
+    db.commit()
+    for prod in new_products:
+        db.refresh(prod)
+
+    return new_products
+
