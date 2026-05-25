@@ -15,8 +15,9 @@ objetivo declarado del prompt correspondiente, y la consistencia con el resto de
 código base.
 
 **Resultado global:** de los 14 prompts, **5 quedaron correctos**, **1 quedó parcial**
-y **8 presentan defectos** — incluyendo 6 de severidad alta (uno de ellos rompe la
-compilación del frontend y otro hace fallar un test). Innti produjo código que, en
+y **8 presentan defectos** — incluyendo 7 de severidad alta (uno impide arrancar el
+backend, otro rompe la compilación del frontend y otro hace fallar un test). Innti
+produjo código que, en
 general, *parece* correcto y sigue la estructura pedida, pero falla en la
 **integración entre piezas** (rutas, endpoints, contratos) y en algunos detalles
 de cómo funcionan realmente las librerías (TipTap, Docker, jest-dom).
@@ -31,7 +32,7 @@ documentados para decisión del equipo (ver sección 5).
 |--------|------|-----------|--------------------|
 | 1.1 | CRUD de Clientes | ✅ Correcto | — |
 | 1.2 | Productos en propuesta | ✅ Correcto | — |
-| 2.1 | PDF desde Word | ⚠️ Incompleto | El método se creó pero nunca se expuso como endpoint (ver H3) |
+| 2.1 | PDF desde Word | ❌ Bug grave | H7 — el import de WeasyPrint impide arrancar el backend; además quedó sin endpoint (H3) |
 | 2.2 | Plantilla Word Quipux | ✅ Correcto | Detalles cosméticos menores |
 | 3.1 | Formulario de Cliente | ✅ Correcto | Detalles menores |
 | 3.2 | Selector de esquemas | ✅ Correcto | Detalles menores |
@@ -204,6 +205,42 @@ Verificado: `tsc --noEmit` ahora termina sin errores en todo `src`.
 
 ---
 
+### H7 — El backend no arranca: WeasyPrint se importa a nivel de módulo (Prompt 2.1)
+
+**Archivo:** `backend/app/services/document_generator.py`
+
+El Prompt 2.1 añadió al inicio del archivo:
+
+```python
+import mammoth
+from weasyprint import HTML
+```
+
+WeasyPrint carga librerías nativas del sistema (GTK / Pango / Cairo / `gobject`) en
+el **momento de importarse**. En cualquier equipo que no tenga esas librerías
+instaladas —el caso habitual en Windows— el simple `import` revienta con
+`OSError: cannot load library 'gobject-2.0-0'`.
+
+Como ese import está a nivel de módulo, y `documents.py` importa
+`document_generator.py`, y `main.py` importa `documents.py`, **la cadena hace que el
+backend completo no pueda arrancar**: `uvicorn app.main:app` falla en el import,
+antes de servir una sola petición. No es que falle la generación de PDF — es que no
+levanta nada.
+
+**Corrección aplicada:** se convirtieron `import mammoth` y `from weasyprint import
+HTML` en **imports diferidos** dentro del método `convert_docx_to_pdf`. Así el módulo
+se importa siempre sin problema y WeasyPrint solo se carga cuando alguien llama de
+verdad a la conversión a PDF. Si faltan las librerías nativas, únicamente el endpoint
+`/generate-pdf` devolverá un error 500 claro; el resto de la aplicación funciona.
+
+> Para que el endpoint de PDF funcione hace falta el runtime de GTK. En Windows se
+> instala con el paquete GTK3; en el contenedor Docker ya está cubierto porque el
+> `backend/Dockerfile` instala `libcairo2`, `libpango-1.0-0`, etc.
+
+**Verificado:** `import app.main` funciona ahora sin WeasyPrint instalado.
+
+---
+
 ## 3. Hallazgos de severidad MEDIA
 
 ### M1 — La documentación de la API tiene errores factuales (Prompt 6.1)
@@ -265,10 +302,11 @@ Los tres endpoints (POST/DELETE/PUT) verifican existencia (404) y estado `DRAFT`
 (400), y usan los esquemas correctos. El PUT reemplaza correctamente. Sin
 observaciones.
 
-**Prompt 2.1 — PDF desde Word** ⚠️
-El método `convert_docx_to_pdf` está bien implementado (mammoth → HTML → WeasyPrint,
-maneja archivo inexistente) y `mammoth` se añadió a `requirements.txt`. Pero quedó
-**sin exponer**: ningún endpoint lo usaba. Resuelto en H3.
+**Prompt 2.1 — PDF desde Word** ❌
+Ver **H7** (el import de WeasyPrint impedía arrancar el backend) y **H3** (el método
+quedó sin endpoint). El método `convert_docx_to_pdf` en sí está bien implementado
+(mammoth → HTML → WeasyPrint, maneja archivo inexistente) y `mammoth` se añadió a
+`requirements.txt`.
 
 **Prompt 2.2 — Plantilla Word Quipux** ✅
 Cumple márgenes, estilos de Heading 1/2 con los colores pedidos, portada, placeholder
@@ -338,6 +376,7 @@ frontend, nginx con proxy `/api`, `.dockerignore` del backend adecuado.
 | H4 | `backend/tests/test_proposals_api.py` | Eliminado el bloque duplicado |
 | H5 | `docker-compose.yml` | Volumen con nombre para la BD + `DATABASE_URL` |
 | H6 | `frontend/src/__tests__/ProposalListPage.test.tsx` | Import `@testing-library/jest-dom/vitest` |
+| H7 | `backend/app/services/document_generator.py` | Imports diferidos de WeasyPrint/mammoth |
 | M1 | `docs/API.md` | Reescritura completa con esquemas y endpoints reales |
 | L1 | `frontend/src/components/ProposalEditor.tsx` | `font-white` → `font-medium` |
 | L3 | `backend/app/middleware/__init__.py` | Archivo creado |
@@ -366,6 +405,8 @@ frontend, nginx con proxy `/api`, `.dockerignore` del backend adecuado.
   correcciones (antes fallaba por H6).
 - **Sintaxis Python:** `documents.py`, `test_proposals_api.py`, `error_handler.py`
   y `middleware/__init__.py` compilan sin errores.
+- **Arranque del backend:** se verificó que `import app.main` funciona **sin
+  WeasyPrint instalado** (la causa de H7) — el backend ya puede arrancar.
 - **`docker-compose.yml`:** YAML válido; el volumen `sqlite_data` queda declarado y
   utilizado.
 - **Limitación:** no fue posible ejecutar `vitest` en el entorno de revisión porque

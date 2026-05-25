@@ -4,8 +4,6 @@ Genera propuestas comerciales y anexos técnicos con la estructura estándar de 
 """
 from pathlib import Path
 from typing import List, Optional
-import mammoth
-from weasyprint import HTML
 from docx import Document
 from docx.shared import Inches, Pt, Cm, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
@@ -344,6 +342,14 @@ class DocumentGenerator:
         Returns:
             Ruta del PDF generado.
         """
+        # Imports diferidos: WeasyPrint carga librerías nativas del sistema
+        # (GTK / Pango / Cairo / gobject) en el momento de importarse. Si se
+        # importara a nivel de módulo, el backend COMPLETO no podría arrancar en
+        # equipos que no tengan esas librerías instaladas (caso típico en Windows).
+        # Con el import aquí, solo este endpoint falla si faltan las librerías.
+        import mammoth
+        from weasyprint import HTML
+
         docx_file = Path(docx_path)
         if not docx_file.exists():
             raise DocumentGeneratorError(f"El archivo no existe: {docx_path}")
