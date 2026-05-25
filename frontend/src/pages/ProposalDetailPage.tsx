@@ -38,8 +38,9 @@ const ProposalDetailPage: React.FC = () => {
       let response
       if (type === 'annex') {
         response = await proposalApi.generateAnnex(proposal.id)
+      } else if (type === 'pdf') {
+        response = await proposalApi.generatePdf(proposal.id, true)
       } else {
-        // useInnti=true for Word/PDF as implied by "Generar Word" and "Generar PDF" actions
         response = await proposalApi.generateDocument(proposal.id, true)
       }
       

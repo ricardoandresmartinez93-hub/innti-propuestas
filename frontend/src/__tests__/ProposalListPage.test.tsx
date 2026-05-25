@@ -3,13 +3,11 @@
  */
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
-import * as matchers from '@testing-library/jest-dom/matchers'
+import '@testing-library/jest-dom/vitest'
 import { MemoryRouter } from 'react-router-dom'
 import ProposalListPage from '../pages/ProposalListPage'
 import { proposalApi } from '../services/api'
 import type { Proposal } from '../types'
-
-expect.extend(matchers)
 
 // Mock de proposalApi
 vi.mock('../services/api', () => ({

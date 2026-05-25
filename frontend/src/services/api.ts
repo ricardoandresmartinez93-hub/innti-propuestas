@@ -48,6 +48,12 @@ export const proposalApi = {
       responseType: 'blob',
     }),
 
+  generatePdf: (id: number, useInnti = true) =>
+    api.post(`/proposals/${id}/generate-pdf`, null, {
+      params: { use_innti: useInnti },
+      responseType: 'blob',
+    }),
+
   generateAnnex: (id: number) =>
     api.post(`/proposals/${id}/generate-annex`, null, {
       responseType: 'blob',

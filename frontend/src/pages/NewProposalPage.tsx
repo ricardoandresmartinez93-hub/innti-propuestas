@@ -56,7 +56,7 @@ export default function NewProposalPage() {
       }
       
       const res = await proposalApi.create(proposalData)
-      navigate(`/editor/${res.data.id}`)
+      navigate(`/proposals/${res.data.id}`)
     } catch (error) {
       console.error('Error creating proposal:', error)
       alert('Error al crear la propuesta')

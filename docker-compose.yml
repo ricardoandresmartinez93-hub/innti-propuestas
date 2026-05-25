@@ -1,14 +1,16 @@
-version: '3.8'
-
 services:
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: innti-backend
+    environment:
+      # La BD SQLite se ubica DENTRO del volumen persistente para que sobreviva
+      # a reinicios/recreaciones del contenedor. Esta variable tiene prioridad
+      # sobre la definida en .env.
+      - DATABASE_URL=sqlite:////app/data/innti_propuestas.db
     volumes:
-      - ./backend/data:/app/data
-      - ./backend/innti_propuestas.db:/app/innti_propuestas.db
+      - sqlite_data:/app/data
     env_file:
       - ./backend/.env
     ports:

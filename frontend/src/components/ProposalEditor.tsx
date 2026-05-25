@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Table from '@tiptap/extension-table'
@@ -86,6 +86,14 @@ const ProposalEditor: React.FC<ProposalEditorProps> = ({ proposalId, initialCont
   const [isSaving, setIsSaving] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
 
+  // El callback onUpdate de TipTap se registra una sola vez al crear el editor,
+  // por lo que captura el valor inicial de activeTab. Usamos una ref para que
+  // onUpdate siempre escriba en la pestaña activa actual.
+  const activeTabRef = useRef(activeTab)
+  useEffect(() => {
+    activeTabRef.current = activeTab
+  }, [activeTab])
+
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -99,7 +107,7 @@ const ProposalEditor: React.FC<ProposalEditorProps> = ({ proposalId, initialCont
     content: initialContent[activeTab] || '',
     onUpdate: ({ editor }) => {
       const html = editor.getHTML()
-      setContents((prev) => ({ ...prev, [activeTab]: html }))
+      setContents((prev) => ({ ...prev, [activeTabRef.current]: html }))
       setHasUnsavedChanges(true)
     },
     editorProps: {
@@ -157,7 +165,7 @@ const ProposalEditor: React.FC<ProposalEditorProps> = ({ proposalId, initialCont
           <button
             onClick={handleSave}
             disabled={isSaving || !hasUnsavedChanges}
-            className={`px-4 py-2 text-sm font-white rounded shadow ${
+            className={`px-4 py-2 text-sm font-medium rounded shadow ${
               isSaving || !hasUnsavedChanges
                 ? 'bg-gray-400 cursor-not-allowed text-gray-200'
                 : 'bg-blue-600 hover:bg-blue-700 text-white'

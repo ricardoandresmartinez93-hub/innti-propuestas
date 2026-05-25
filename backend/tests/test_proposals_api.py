@@ -20,10 +20,10 @@ def test_create_proposal_success(client, sample_client_data, sample_proposal_dat
     # 2. Crear propuesta
     proposal_data = sample_proposal_data.copy()
     proposal_data["client_id"] = client_id
-    
+
     response = client.post("/api/proposals/", json=proposal_data)
     assert response.status_code == status.HTTP_201_CREATED
-    
+
     data = response.json()
     assert data["title"] == proposal_data["title"]
     assert data["client_id"] == client_id
@@ -34,7 +34,7 @@ def test_create_proposal_invalid_client(client, sample_proposal_data):
     """Error 404 si el cliente no existe."""
     proposal_data = sample_proposal_data.copy()
     proposal_data["client_id"] = 9999  # ID inexistente
-    
+
     response = client.post("/api/proposals/", json=proposal_data)
     assert response.status_code == status.HTTP_404_NOT_FOUND
     assert "no encontrado" in response.json()["detail"]
@@ -56,7 +56,7 @@ def test_update_proposal_content(client, sample_client_data, sample_proposal_dat
     }
     response = client.patch(f"/api/proposals/{proposal_id}", json=update_data)
     assert response.status_code == status.HTTP_200_OK
-    
+
     data = response.json()
     assert data["economic_conditions"] == update_data["economic_conditions"]
     assert data["payment_terms"] == update_data["payment_terms"]
@@ -105,7 +105,7 @@ def test_full_approval_flow(client, sample_client_data, sample_proposal_data):
     }
     app1_res = client.post(f"/api/proposals/{proposal_id}/approve", json=angela_app)
     assert app1_res.status_code == status.HTTP_200_OK
-    
+
     # Verificar cambio de estado en la propuesta
     prop_status_res = client.get(f"/api/proposals/{proposal_id}")
     assert prop_status_res.json()["status"] == "reviewed"
@@ -125,13 +125,7 @@ def test_full_approval_flow(client, sample_client_data, sample_proposal_data):
     }
     app2_res = client.post(f"/api/proposals/{proposal_id}/approve", json=vp_app)
     assert app2_res.status_code == status.HTTP_200_OK
-    
-    # Verificar estado final
-    final_prop_res = client.get(f"/api/proposals/{proposal_id}")
-    assert final_prop_res.json()["status"] == "approved"
-    app2_res = client.post(f"/api/proposals/{proposal_id}/approve", json=vp_app)
-    assert app2_res.status_code == status.HTTP_200_OK
-    
+
     # Verificar estado final
     final_prop_res = client.get(f"/api/proposals/{proposal_id}")
     assert final_prop_res.json()["status"] == "approved"

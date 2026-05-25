@@ -16,20 +16,25 @@ from app.services.innti_service import InntiService, InntiServiceError
 
 router = APIRouter(prefix="/api/proposals", tags=["Documentos"])
 
+DOCX_MEDIA_TYPE = (
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+)
 
-@router.post("/{proposal_id}/generate-document")
-def generate_document(
+
+def _build_proposal_docx(
     proposal_id: int,
-    use_innti: bool = True,
-    db: Session = Depends(get_db),
-    settings: Settings = Depends(get_settings),
-):
+    use_innti: bool,
+    db: Session,
+    settings: Settings,
+) -> Path:
     """
-    Genera el documento Word de la propuesta.
+    Construye el documento Word de la propuesta y lo guarda en un archivo temporal.
 
-    Args:
-        proposal_id: ID de la propuesta.
-        use_innti: Si True, usa Innti para generar texto. Si False, usa plantillas.
+    Returns:
+        Ruta del archivo .docx generado.
+
+    Raises:
+        HTTPException 404 si la propuesta no existe.
     """
     proposal = db.query(Proposal).filter(Proposal.id == proposal_id).first()
     if not proposal:
@@ -93,14 +98,62 @@ def generate_document(
     # Guardar en archivo temporal
     output_dir = Path(tempfile.gettempdir()) / "innti_docs"
     output_dir.mkdir(exist_ok=True)
-    filename = f"propuesta_{proposal_id}.docx"
-    output_path = output_dir / filename
+    output_path = output_dir / f"propuesta_{proposal_id}.docx"
     generator.save_document(doc, str(output_path))
+    return output_path
+
+
+@router.post("/{proposal_id}/generate-document")
+def generate_document(
+    proposal_id: int,
+    use_innti: bool = True,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    """
+    Genera el documento Word de la propuesta.
+
+    Args:
+        proposal_id: ID de la propuesta.
+        use_innti: Si True, usa Innti para generar texto. Si False, usa plantillas.
+    """
+    output_path = _build_proposal_docx(proposal_id, use_innti, db, settings)
 
     return FileResponse(
         path=str(output_path),
-        filename=filename,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        filename=output_path.name,
+        media_type=DOCX_MEDIA_TYPE,
+    )
+
+
+@router.post("/{proposal_id}/generate-pdf")
+def generate_pdf(
+    proposal_id: int,
+    use_innti: bool = True,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    """
+    Genera la propuesta en formato PDF.
+
+    Internamente construye el documento Word y luego lo convierte a PDF.
+    """
+    docx_path = _build_proposal_docx(proposal_id, use_innti, db, settings)
+    pdf_path = docx_path.with_suffix(".pdf")
+
+    generator = DocumentGenerator()
+    try:
+        generator.convert_docx_to_pdf(str(docx_path), str(pdf_path))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"No se pudo generar el PDF: {e}",
+        )
+
+    return FileResponse(
+        path=str(pdf_path),
+        filename=f"propuesta_{proposal_id}.pdf",
+        media_type="application/pdf",
     )
 
 
@@ -131,5 +184,5 @@ def generate_technical_annex(
     return FileResponse(
         path=str(output_path),
         filename=filename,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        media_type=DOCX_MEDIA_TYPE,
     )
