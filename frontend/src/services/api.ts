@@ -54,4 +54,19 @@ export const proposalApi = {
     }),
 }
 
+// --- Clientes ---
+export const clientApi = {
+  list: (skip = 0, limit = 50) =>
+    api.get<Client[]>('/clients/', { params: { skip, limit } }),
+
+  get: (id: number) =>
+    api.get<Client>(`/clients/${id}`),
+
+  create: (data: ClientCreate) =>
+    api.post<Client>('/clients/', data),
+
+  update: (id: number, data: Partial<ClientCreate>) =>
+    api.patch<Client>(`/clients/${id}`, data),
+}
+
 export default api
