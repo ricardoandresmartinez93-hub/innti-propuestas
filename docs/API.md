@@ -240,14 +240,17 @@ Estos endpoints solo operan sobre propuestas en estado `draft`.
 
 ## 4. Aprobaciones
 
-Flujo de aprobación: `draft → pending_review → reviewed → pending_vp → approved`.
+Flujo de aprobación: `draft → pending_review → reviewed → pending_vp → approved → sent_to_client`.
 
 ### Enviar a Revisión / Avanzar en el Flujo
 
 - **Método**: `POST`
 - **Ruta**: `/api/proposals/{proposal_id}/submit-review`
-- **Descripción**: Si la propuesta está en `draft`, pasa a `pending_review`. Si está
-  en `reviewed`, pasa a `pending_vp`.
+- **Descripción**: Endpoint multi-transición — detecta el estado actual y avanza:
+  - `draft` → `pending_review`
+  - `reviewed` → `pending_vp`
+  - `approved` → `sent_to_client` (estado final)
+  - `rejected` → `draft` (restaura a borrador)
 - **Errores**: `404` si no existe; `400` si el estado actual no permite avanzar.
 
 ### Aprobar Propuesta

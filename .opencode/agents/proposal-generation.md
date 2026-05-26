@@ -56,9 +56,10 @@ Orquesta la generación de una propuesta desde cero: crea el registro, genera co
 
 5. **Flujo de aprobación** (si aplica)
    - `POST /api/proposals/{id}/submit-review` → PENDING_REVIEW (Ángela)
-   - `POST /api/proposals/{id}/approve` (role: reviewer) → REVIEWED
+   - `POST /api/proposals/{id}/approve` body: `{ role: "reviewer", action: "approved", approver_name, comments? }` → REVIEWED
    - `POST /api/proposals/{id}/submit-review` → PENDING_VP (Juan Pablo)
-   - `POST /api/proposals/{id}/approve` (role: vp) → APPROVED
+   - `POST /api/proposals/{id}/approve` body: `{ role: "vp", action: "approved", approver_name, comments? }` → APPROVED
+   - `POST /api/proposals/{id}/submit-review` → SENT_TO_CLIENT (estado final)
 
 6. **Exportar documento final**
    - `POST /api/proposals/{id}/generate-document` → Word (.docx)

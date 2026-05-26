@@ -47,15 +47,20 @@ Flujo de usuario completo para crear y gestionar propuestas en Innti Propuestas.
 
 **Ubicación UI:** ProposalEditor → TipTap rich text editor
 
-Estas secciones **deben ser editadas manualmente**:
+El editor tiene **7 pestañas**. Comportamiento por pestaña:
 
-| Sección | Descripción | Frecuencia |
-|---------|------------|-----------|
-| **Condiciones económicas** | Valores totales, metodología de pago, descuentos | Siempre |
-| **Forma de pago** | Cronograma, cuenta de pago, vigencia | Siempre |
-| **Servicios excluidos** | Qué NO se incluye en la propuesta | Auto-completado (editable) |
-| **Propiedad intelectual** | Derechos de autor y licencias | Auto-completado (editable) |
-| **Confidencialidad y ética** | Cláusulas legales | Auto-completado (no editar sin jurídica) |
+| Pestaña | Campo | Editable | Generada por |
+|---------|-------|----------|--------------|
+| Contexto | `context_content` | ✅ Sí | Innti (editable post-gen) |
+| Alcance | `scope_content` | ✅ Sí | Innti (editable post-gen) |
+| Condiciones Económicas | `economic_conditions` | ✅ Sí | Manual (obligatorio) |
+| Forma de Pago | `payment_terms` | ✅ Sí | Manual (obligatorio) |
+| Servicios Excluidos | `excluded_services` | ✅ Sí | Auto-completado según esquema |
+| Propiedad Intelectual | `ip_section` | ✅ Sí | Auto-completado según esquema |
+| Carta de Presentación | `letter_content` | ❌ Solo lectura | Innti (banner amarillo ⚠️) |
+
+> El botón **Guardar** persiste todos los campos mediante `PATCH /api/proposals/{id}`.
+> Funciona desde cualquier pestaña (incluso estando en Carta de Presentación).
 
 **Referencia:** Skill `document-generation` para textos fijos
 
@@ -91,24 +96,26 @@ para avanzar de `REVIEWED` a `PENDING_VP`. Este paso usa el mismo botón/endpoin
 
 ## 6️⃣ Exportar Documento
 
-**Ubicación UI:** ProposalEditor → "Descargar"
+**Ubicación UI:** Panel lateral derecho → "Acciones de Documento"
 
-Disponible cuando la propuesta está en estado `APPROVED`:
+Disponible en **cualquier estado** (DRAFT, PENDING_REVIEW, APPROVED, etc.):
 
-- **Word (.docx)** → Descargar documento editable
-- **PDF** → Descargar documento final para enviar al cliente
+- **Word (.docx)** → Documento editable para revisión interna
+- **PDF** → Documento final para el cliente
+- **Anexo Técnico (.docx)** → Detalle técnico de productos (independiente)
 
 **Referencia:** Skill `document-generation` para detalles técnicos
 
 ## 7️⃣ Enviar al Cliente
 
-**Ubicación UI:** ProposalEditor → "Enviar al cliente"
+**Ubicación UI:** Botón de acción contextual cuando `status == APPROVED`
 
-1. Asegurar que `status == APPROVED`
-2. Ingresar **email del cliente** (o usar el registrado)
-3. Click: **Enviar**
-4. Estado: `SENT_TO_CLIENT` (final)
-5. Email con PDF se envía automáticamente
+1. Asegurar que `status == APPROVED` (aprobada por Juan Pablo)
+2. Click: **📤 Marcar como Enviada al Cliente**
+3. Estado: `SENT_TO_CLIENT` (estado final — no reversible)
+
+> No requiere ingresar email: marca el estado en BD vía `POST /api/proposals/{id}/submit-review`
+> (el endpoint detecta `APPROVED` y ejecuta la transición a `SENT_TO_CLIENT`).
 
 ---
 
@@ -133,5 +140,3 @@ Exportar Word/PDF → SENT_TO_CLIENT (estado final)
 ```
 
 **Referencia:** AGENTS.md para detalles técnicos de los enums y endpoints.
-
-**Referencia:** AGENTS.md para detalles técnicos de los enums

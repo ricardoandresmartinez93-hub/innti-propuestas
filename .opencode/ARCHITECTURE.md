@@ -91,11 +91,14 @@ Comparación de componentes:
 Estas son las cosas que son fáciles de equivocar si no se leyó el código real:
 
 1. **`REVIEWED` NO puede rechazarse.** Solo `PENDING_REVIEW` y `PENDING_VP` pueden ir a `REJECTED`.
-2. **`submit-review` hace dos cosas:** `DRAFT → PENDING_REVIEW` **y** `REVIEWED → PENDING_VP`. El mismo endpoint detecta el estado actual.
+2. **`submit-review` maneja 4 transiciones** según el estado actual: `DRAFT→PENDING_REVIEW`, `REVIEWED→PENDING_VP`, `APPROVED→SENT_TO_CLIENT`, `REJECTED→DRAFT`. El endpoint detecta el estado automáticamente.
 3. **Los endpoints de documentos son POST, no GET**, y usan prefijo `/api/proposals/`, no `/documents/`.
 4. **Concesión/BPO y Suministro son Fase 2** — están definidos en el enum pero no deben usarse en el MVP.
 5. **Los documentos se guardan en `/tmp/innti_docs/`** (FileResponse), no se sirven desde memoria (StreamingResponse).
 6. **No hay Alembic** — el esquema de BD se recrea con `Base.metadata.create_all` al iniciar.
+7. **`action` es campo requerido** en los bodies de `/approve` y `/reject`: `"action": "approved"` o `"action": "rejected"`. No tiene valor por defecto en el schema Pydantic.
+8. **ProposalEditor tiene 7 pestañas**: 4 editables siempre (contexto, alcance, condiciones, pago), 2 auto-completadas (servicios excluidos, propiedad intelectual), 1 solo lectura (carta de presentación). El botón Guardar funciona desde cualquier pestaña.
+9. **`key={proposal.updated_at}` en ProposalEditor**: fuerza re-mount del componente TipTap cuando Innti regenera el contenido, evitando contenido obsoleto en el editor sin recargar la página.
 
 ---
 
@@ -116,8 +119,10 @@ Estas son las cosas que son fáciles de equivocar si no se leyó el código real
 | Aspecto | AGENTS.md | Skills | Agents |
 |--------|-----------|--------|--------|
 | Stack y arquitectura | ✅ | — | — |
-| Flujo de aprobación | ✅ | ✅ | ✅ |
+| Flujo de aprobación (7 estados) | ✅ | ✅ | ✅ |
+| `submit-review` multi-transición | ✅ | ✅ | ✅ |
 | Cómo crear propuesta | — | ✅ | ✅ |
+| Editor TipTap (7 tabs, readOnly) | — | ✅ | — |
 | Testing | — | ✅ | ✅ |
 | Generación de documentos | — | ✅ | ✅ |
 | Validación pre-commit | — | — | ✅ |

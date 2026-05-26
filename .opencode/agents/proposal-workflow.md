@@ -87,12 +87,16 @@ POST /api/proposals/{id}/approve
   "approver_name": "Ángela García",
   "approver_email": "angela@quipux.com",
   "role": "reviewer",
+  "action": "approved",
   "comments": "Revisado y aprobado"
 }
 ```
 → Estado: `reviewed`. **Aún NO está en PENDING_VP.**
 
-> ⚠️ Si Ángela **rechaza**: `POST /api/proposals/{id}/reject` (role: "reviewer")
+> ⚠️ Si Ángela **rechaza**: `POST /api/proposals/{id}/reject`
+> ```json
+> { "role": "reviewer", "approver_name": "Ángela García", "action": "rejected", "comments": "Motivo del rechazo (obligatorio)" }
+> ```
 > → Estado: `rejected` → puede volver a `draft` con otro `submit-review`.
 
 ---
@@ -116,12 +120,16 @@ POST /api/proposals/{id}/approve
   "approver_name": "Juan Pablo Ramírez Madrid",
   "approver_email": "juanpablo@quipux.com",
   "role": "vp",
+  "action": "approved",
   "comments": "Aprobada para envío al cliente"
 }
 ```
 → Estado: `approved`.
 
-> ⚠️ Si Juan Pablo **rechaza**: `POST /api/proposals/{id}/reject` (role: "vp")
+> ⚠️ Si Juan Pablo **rechaza**: `POST /api/proposals/{id}/reject`
+> ```json
+> { "role": "vp", "approver_name": "Juan Pablo Ramírez Madrid", "action": "rejected", "comments": "Motivo (obligatorio)" }
+> ```
 > → Estado: `rejected` → puede volver a `draft`.
 
 ---
@@ -141,21 +149,32 @@ POST /api/proposals/{id}/generate-annex
 
 ---
 
+## Paso 10 — Marcar como Enviada al Cliente (APPROVED → SENT_TO_CLIENT)
+
+```http
+POST /api/proposals/{id}/submit-review
+```
+→ El endpoint detecta `approved` y ejecuta la transición a `sent_to_client` (estado final, no reversible).
+
+---
+
 ## Resumen de Estados y Transiciones
 
 ```
 DRAFT ──[submit-review]──► PENDING_REVIEW ──[approve REVIEWER]──► REVIEWED
-                                │                                       │
-                           [reject REVIEWER]               [submit-review]
-                                │                                       │
-                                ▼                                       ▼
-                            REJECTED                             PENDING_VP ──[approve VP]──► APPROVED ──► SENT_TO_CLIENT
-                                │                                    │
-                           [submit-review]                      [reject VP]
-                                │                                    │
-                                ▼                                    ▼
-                              DRAFT                              REJECTED
+  ▲                               │                                    │
+  │                          [reject REVIEWER]              [submit-review]
+  │                               │                                    ▼
+  │                               ▼                              PENDING_VP ──[approve VP]──► APPROVED ──[submit-review]──► SENT_TO_CLIENT
+  │                           REJECTED ◄──────────────────── [reject VP]        
+  └───────────────────── [submit-review] ◄───────────────────────────┘
 ```
+
+> `submit-review` es **multi-transición**: detecta el estado y ejecuta la transición correcta:
+> - `DRAFT` → `PENDING_REVIEW`
+> - `REVIEWED` → `PENDING_VP`
+> - `APPROVED` → `SENT_TO_CLIENT`
+> - `REJECTED` → `DRAFT`
 
 ---
 

@@ -49,8 +49,8 @@ DRAFT ──► PENDING_REVIEW ──► REVIEWED ──► PENDING_VP ──►
 > ⚠️ Solo `PENDING_REVIEW` y `PENDING_VP` pueden ir a `REJECTED`.
 > `REVIEWED` **únicamente** avanza a `PENDING_VP` — no puede rechazarse en ese estado.
 
-> **Transición REVIEWED → PENDING_VP:** se ejecuta con el mismo endpoint `submit-review`
-> (el endpoint detecta el estado actual y avanza al siguiente paso del flujo).
+> **`submit-review` es multi-transición:** detecta el estado actual y avanza en consecuencia:
+> `DRAFT → PENDING_REVIEW` · `REVIEWED → PENDING_VP` · `APPROVED → SENT_TO_CLIENT` · `REJECTED → DRAFT`
 
 | Estado (`ProposalStatus`) | Valor | Descripción |
 |---------------------------|-------|-------------|
@@ -69,9 +69,9 @@ DRAFT ──► PENDING_REVIEW ──► REVIEWED ──► PENDING_VP ──►
 ### Endpoints de Aprobación (prefijo real: `/api/proposals`)
 | Endpoint | Acción |
 |----------|--------|
-| `POST /api/proposals/{id}/submit-review` | Avanza DRAFT→PENDING_REVIEW **o** REVIEWED→PENDING_VP |
-| `POST /api/proposals/{id}/approve` | Registra aprobación (body: role, approver_name, …) |
-| `POST /api/proposals/{id}/reject` | Registra rechazo (body: role, approver_name, comments) |
+| `POST /api/proposals/{id}/submit-review` | Detecta estado actual y avanza: DRAFT→PENDING_REVIEW · REVIEWED→PENDING_VP · APPROVED→SENT_TO_CLIENT · REJECTED→DRAFT |
+| `POST /api/proposals/{id}/approve` | Registra aprobación (body: `role`, `approver_name`, `action: "approved"`, `comments?`) |
+| `POST /api/proposals/{id}/reject` | Registra rechazo (body: `role`, `approver_name`, `action: "rejected"`, `comments` obligatorio) |
 | `POST /api/proposals/{id}/generate-document` | Genera y descarga el Word (usa Innti si `use_innti=true`) |
 | `POST /api/proposals/{id}/generate-pdf` | Genera y descarga el PDF |
 | `POST /api/proposals/{id}/generate-annex` | Genera y descarga el Anexo Técnico (.docx) |
