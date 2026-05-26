@@ -1,7 +1,7 @@
 ---
 name: proposal-workflow
 description: Usar cuando se necesite entender o ejecutar el ciclo de vida completo de una propuesta comercial (crear → generar con Innti → editar → aprobar → exportar). Activar ante preguntas sobre flujo de estados, transiciones de aprobación, endpoints del flujo o al implementar cualquier parte del ciclo de vida de propuestas.
-trigger: manual
+tools: [Read, Write, Edit, Bash, Glob, Grep, WebFetch]
 ---
 
 # Agent: Flujo Completo de Propuesta

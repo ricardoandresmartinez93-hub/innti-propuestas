@@ -1,7 +1,7 @@
 ---
 name: proposal-generation
 description: Usar cuando se necesite crear una propuesta comercial nueva desde cero, generar contenido automático con Innti, o entender cómo funciona la generación de documentos Word/PDF. Activar ante peticiones como "crea una propuesta para...", "genera una propuesta con los productos...", o al implementar/depurar la integración con InntiService.
-trigger: manual
+tools: [Read, Write, Edit, Bash, Glob, Grep, WebFetch]
 ---
 
 # Agent: Generación Automática de Propuesta

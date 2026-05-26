@@ -1,7 +1,7 @@
 ---
 name: pre-commit-validation
 description: Usar antes de hacer un commit o push. Activar ante frases como "valida el código", "voy a hacer commit", "revisa antes de subir", "chequea que todo esté bien" o al finalizar una feature. Ejecuta tests backend (pytest) y frontend (npm test), verifica tipos TypeScript, y recorre el checklist de reglas del proyecto.
-trigger: manual
+tools: [Read, Bash, Glob, Grep]
 ---
 
 # Agent: Validación Pre-Commit
