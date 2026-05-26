@@ -62,7 +62,7 @@ Ejecuta todas las validaciones necesarias antes de hacer commit, asegurando que 
 - [ ] Sin secretos en `.env.example`
 - [ ] Nombres de archivos/variables en snake_case (Python) o camelCase (TS)
 - [ ] Documentación actualizada (AGENTS.md, skills, README)
-- [ ] Cambios en BD: migrations si aplica
+- [ ] Cambios en BD: si se modificaron modelos SQLAlchemy, verificar que `init_db()` recrea las tablas correctamente (no hay Alembic — SQLite recrea con `Base.metadata.create_all`)
 
 ## Referencia
 

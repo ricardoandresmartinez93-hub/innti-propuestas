@@ -86,6 +86,19 @@ Comparación de componentes:
 
 ---
 
+## ⚠️ Reglas No Obvias del Dominio
+
+Estas son las cosas que son fáciles de equivocar si no se leyó el código real:
+
+1. **`REVIEWED` NO puede rechazarse.** Solo `PENDING_REVIEW` y `PENDING_VP` pueden ir a `REJECTED`.
+2. **`submit-review` hace dos cosas:** `DRAFT → PENDING_REVIEW` **y** `REVIEWED → PENDING_VP`. El mismo endpoint detecta el estado actual.
+3. **Los endpoints de documentos son POST, no GET**, y usan prefijo `/api/proposals/`, no `/documents/`.
+4. **Concesión/BPO y Suministro son Fase 2** — están definidos en el enum pero no deben usarse en el MVP.
+5. **Los documentos se guardan en `/tmp/innti_docs/`** (FileResponse), no se sirven desde memoria (StreamingResponse).
+6. **No hay Alembic** — el esquema de BD se recrea con `Base.metadata.create_all` al iniciar.
+
+---
+
 ## ✨ Puntos Fuertes de la Arquitectura
 
 1. **Claridad**: Cada componente tiene un propósito único y bien definido

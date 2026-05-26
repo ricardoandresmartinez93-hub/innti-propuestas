@@ -22,13 +22,18 @@ Contexto de negocio para operar sobre el sistema de propuestas comerciales de Qu
 ## Flujo Completo de Estados (`ProposalStatus`)
 
 ```
-DRAFT
-  └─► PENDING_REVIEW  ──► REVIEWED  ──► PENDING_VP  ──► APPROVED  ──► SENT_TO_CLIENT
-           │                  │               │
-           └──► REJECTED ◄────┘               └──► REJECTED
-                    │
-                    └──► DRAFT  (puede retornar a borrador)
+DRAFT ──► PENDING_REVIEW ──► REVIEWED ──► PENDING_VP ──► APPROVED ──► SENT_TO_CLIENT
+               │                               │
+               └──► REJECTED ◄────────────────┘
+                        │
+                        └──► DRAFT (puede retornar a borrador)
 ```
+
+> ⚠️ **Regla crítica**: `REVIEWED` **solo puede avanzar a `PENDING_VP`** — no puede ir a `REJECTED`.
+> Solo `PENDING_REVIEW` y `PENDING_VP` pueden rechazarse.
+>
+> La transición `REVIEWED → PENDING_VP` se dispara con el mismo endpoint `submit-review`
+> (el servidor detecta el estado actual y ejecuta la transición correcta automáticamente).
 
 ### Tabla de estados
 

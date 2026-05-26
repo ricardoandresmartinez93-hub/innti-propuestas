@@ -33,33 +33,37 @@ Orquesta la generación de una propuesta desde cero: crea el registro, genera co
 
 ## Pasos Ejecutados
 
+> **Prefijo base:** `http://localhost:8000/api`
+
 1. **Crear cliente** (si no existe)
-   - `POST /clients`
+   - `POST /api/clients`
 
 2. **Crear propuesta**
-   - `POST /proposals`
-   - Asignar cliente, esquemas, productos
+   - `POST /api/proposals/`
+   - Asignar `client_id`, esquemas MVP (`licensing`, `services`, `support_maintenance`), productos
 
 3. **Generar contenido con Innti**
-   - `POST /proposals/{id}/generate`
-   - Genera automáticamente:
-     - Carta de presentación (firma Juan Pablo)
+   - `POST /api/proposals/{id}/generate-document?use_innti=true`
+   - Si los campos de texto están vacíos, Innti genera y persiste automáticamente:
+     - Carta de presentación (firma Juan Pablo Ramírez Madrid)
      - Contexto/introducción
      - Alcance
+   - Retorna el `.docx` generado como `FileResponse`
 
-4. **Enriquecer descripciones de productos**
-   - Para cada producto: `InntiService.enrich_product_description()`
-   - Mejora la descripción del anexo técnico
+4. **Editar secciones manuales**
+   - `PATCH /api/proposals/{id}` — condiciones económicas, forma de pago
+   - Servicios excluidos y propiedad intelectual: auto-completados según esquema (editables)
 
-5. **Completar secciones manuales**
-   - Condiciones económicas (usa plantillas según esquema)
-   - Forma de pago (referencia a tarifa estándar)
-   - Servicios excluidos (auto-completado según esquema)
-   - Propiedad intelectual (texto fijo según esquema)
+5. **Flujo de aprobación** (si aplica)
+   - `POST /api/proposals/{id}/submit-review` → PENDING_REVIEW (Ángela)
+   - `POST /api/proposals/{id}/approve` (role: reviewer) → REVIEWED
+   - `POST /api/proposals/{id}/submit-review` → PENDING_VP (Juan Pablo)
+   - `POST /api/proposals/{id}/approve` (role: vp) → APPROVED
 
-6. **Exportar documento**
-   - `GET /documents/{id}/word` → archivo `.docx`
-   - `GET /documents/{id}/pdf` → archivo `.pdf`
+6. **Exportar documento final**
+   - `POST /api/proposals/{id}/generate-document` → Word (.docx)
+   - `POST /api/proposals/{id}/generate-pdf` → PDF
+   - `POST /api/proposals/{id}/generate-annex` → Anexo Técnico (.docx)
 
 ## Salida
 
@@ -76,6 +80,7 @@ Orquesta la generación de una propuesta desde cero: crea el registro, genera co
 
 ## Referencia
 
-- Routers: `/proposals`, `/documents`, `/clients`
-- Servicios: `InntiService`, `DocumentGenerator`, `ApprovalService`
+- Routers: `app/routers/proposals.py`, `app/routers/documents.py`, `app/routers/clients.py`, `app/routers/approvals.py`
+- Servicios: `InntiService`, `DocumentGenerator`, `PortfolioService`, `ApprovalService`
 - Modelos: `Proposal`, `ProposalScheme`, `ProposalProduct`, `Client`
+- Skills: `innti-domain`, `document-generation`, `proposal-workflow`

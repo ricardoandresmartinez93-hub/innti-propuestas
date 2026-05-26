@@ -39,12 +39,18 @@
 Los nombres de estado son **valores del enum `ProposalStatus`** (usar siempre estas cadenas exactas):
 
 ```
-DRAFT → PENDING_REVIEW → REVIEWED → PENDING_VP → APPROVED → SENT_TO_CLIENT
-                ↓               ↓          ↓
-            REJECTED        REJECTED   REJECTED
-                ↓
-             DRAFT (puede volver a borrador)
+DRAFT ──► PENDING_REVIEW ──► REVIEWED ──► PENDING_VP ──► APPROVED ──► SENT_TO_CLIENT
+               │                                │
+               └──► REJECTED ◄─────────────────┘
+                        │
+                        └──► DRAFT (puede volver a borrador)
 ```
+
+> ⚠️ Solo `PENDING_REVIEW` y `PENDING_VP` pueden ir a `REJECTED`.
+> `REVIEWED` **únicamente** avanza a `PENDING_VP` — no puede rechazarse en ese estado.
+
+> **Transición REVIEWED → PENDING_VP:** se ejecuta con el mismo endpoint `submit-review`
+> (el endpoint detecta el estado actual y avanza al siguiente paso del flujo).
 
 | Estado (`ProposalStatus`) | Valor | Descripción |
 |---------------------------|-------|-------------|
@@ -57,8 +63,18 @@ DRAFT → PENDING_REVIEW → REVIEWED → PENDING_VP → APPROVED → SENT_TO_CL
 | `SENT_TO_CLIENT` | `"sent_to_client"` | Estado final — enviada al cliente |
 
 ### Roles de Aprobación (`ApprovalRole`)
-- `REVIEWER` → Ángela (primera revisión): aprueba de `PENDING_REVIEW` a `REVIEWED`
-- `VP` → Juan Pablo (aprobación final): aprueba de `PENDING_VP` a `APPROVED`
+- `REVIEWER` → Ángela (primera revisión): aprueba `PENDING_REVIEW` → `REVIEWED`; o rechaza → `REJECTED`
+- `VP` → Juan Pablo (aprobación final): aprueba `PENDING_VP` → `APPROVED`; o rechaza → `REJECTED`
+
+### Endpoints de Aprobación (prefijo real: `/api/proposals`)
+| Endpoint | Acción |
+|----------|--------|
+| `POST /api/proposals/{id}/submit-review` | Avanza DRAFT→PENDING_REVIEW **o** REVIEWED→PENDING_VP |
+| `POST /api/proposals/{id}/approve` | Registra aprobación (body: role, approver_name, …) |
+| `POST /api/proposals/{id}/reject` | Registra rechazo (body: role, approver_name, comments) |
+| `POST /api/proposals/{id}/generate-document` | Genera y descarga el Word (usa Innti si `use_innti=true`) |
+| `POST /api/proposals/{id}/generate-pdf` | Genera y descarga el PDF |
+| `POST /api/proposals/{id}/generate-annex` | Genera y descarga el Anexo Técnico (.docx) |
 
 ### Portafolio
 - Fuente de verdad: `ListaPortafolio.xlsx` (raíz del proyecto).

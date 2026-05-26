@@ -73,14 +73,21 @@ Estas secciones **deben ser editadas manualmente**:
 ### Estado: `PENDING_REVIEW` (Ángela revisa)
 
 **Ángela puede:**
-- ✅ **Aprobar** → Estado: `REVIEWED` → Pasa a Juan Pablo (VP)
-- ❌ **Rechazar** → Estado: `REJECTED` → Vuelve a `DRAFT` para ediciones
+- ✅ **Aprobar** → Estado: `REVIEWED` ← la propuesta queda en revisado, **aún no pasa a VP**
+- ❌ **Rechazar** → Estado: `REJECTED` → Vuelve a `DRAFT` para correcciones
+
+### ⚠️ Paso intermedio: Enviar a VP (REVIEWED → PENDING_VP)
+
+Después de que Ángela aprueba, el comercial (no Ángela) debe presionar **"Enviar a VP"**
+para avanzar de `REVIEWED` a `PENDING_VP`. Este paso usa el mismo botón/endpoint de "Enviar".
+
+> El sistema detecta automáticamente el estado actual: si es `REVIEWED`, avanza a `PENDING_VP`.
 
 ### Estado: `PENDING_VP` (Juan Pablo revisa)
 
 **Juan Pablo (VP) puede:**
-- ✅ **Aprobar** → Estado: `APPROVED` → Propuesta lista
-- ❌ **Rechazar** → Estado: `REJECTED` → Vuelve a `DRAFT`
+- ✅ **Aprobar** → Estado: `APPROVED` → Propuesta lista para exportar
+- ❌ **Rechazar** → Estado: `REJECTED` → Vuelve a `DRAFT` para correcciones
 
 ## 6️⃣ Exportar Documento
 
@@ -114,15 +121,17 @@ Generar contenido (DRAFT + contenido)
     ↓
 Editar manual (DRAFT + secciones editadas)
     ↓
-Enviar a revisión (PENDING_REVIEW)
+"Enviar a revisión" → PENDING_REVIEW
     ↓
-╔─ Ángela aprueba → REVIEWED → PENDING_VP
-║     └─ Rechaza → REJECTED → DRAFT (editar de nuevo)
-║
-├─ Juan Pablo aprueba → APPROVED → Exportar → SENT_TO_CLIENT
-│     └─ Rechaza → REJECTED → DRAFT
-│
-└─ (repetir hasta aprobación)
+Ángela aprueba → REVIEWED     (Ángela rechaza → REJECTED → DRAFT)
+    ↓
+"Enviar a VP" → PENDING_VP    ← paso explícito, mismo botón/endpoint
+    ↓
+Juan Pablo aprueba → APPROVED  (Juan Pablo rechaza → REJECTED → DRAFT)
+    ↓
+Exportar Word/PDF → SENT_TO_CLIENT (estado final)
 ```
+
+**Referencia:** AGENTS.md para detalles técnicos de los enums y endpoints.
 
 **Referencia:** AGENTS.md para detalles técnicos de los enums
