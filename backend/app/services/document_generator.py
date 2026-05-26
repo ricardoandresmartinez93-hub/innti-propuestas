@@ -432,7 +432,9 @@ class DocumentGenerator:
 
     def convert_docx_to_pdf(self, docx_path: str, pdf_path: str) -> str:
         """
-        Convierte un archivo .docx a PDF usando LibreOffice (más confiable que WeasyPrint).
+        Convierte un archivo .docx a PDF.
+        En Windows usa docx2pdf (requiere Word).
+        En otros sistemas intenta usar LibreOffice.
 
         Args:
             docx_path: Ruta al archivo .docx
@@ -441,46 +443,48 @@ class DocumentGenerator:
         Returns:
             Ruta del PDF generado.
         """
-        import subprocess
-        import shutil
+        import os
+        import platform
 
         docx_file = Path(docx_path)
         if not docx_file.exists():
             raise DocumentGeneratorError(f"El archivo no existe: {docx_path}")
 
         try:
-            # Usar LibreOffice para convertir DOCX a PDF
-            # --headless: modo sin interfaz gráfica
-            # --convert-to pdf: especificar formato de salida
-            # --outdir: directorio de salida
+            if platform.system() == "Windows":
+                from docx2pdf import convert
+                # docx2pdf puede fallar si no hay Word instalado, pero es lo estándar en Windows
+                convert(docx_path, pdf_path)
+            else:
+                import subprocess
+                pdf_dir = Path(pdf_path).parent
+                pdf_dir.mkdir(parents=True, exist_ok=True)
 
-            pdf_dir = Path(pdf_path).parent
-            pdf_dir.mkdir(parents=True, exist_ok=True)
-
-            result = subprocess.run(
-                [
-                    "libreoffice",
-                    "--headless",
-                    "--convert-to", "pdf",
-                    "--outdir", str(pdf_dir),
-                    str(docx_path)
-                ],
-                capture_output=True,
-                text=True,
-                timeout=60
-            )
-
-            if result.returncode != 0:
-                raise DocumentGeneratorError(
-                    f"LibreOffice error: {result.stderr}"
+                result = subprocess.run(
+                    [
+                        "libreoffice",
+                        "--headless",
+                        "--convert-to", "pdf",
+                        "--outdir", str(pdf_dir),
+                        str(docx_path)
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=60
                 )
 
-            # LibreOffice genera el PDF con el mismo nombre pero extensión .pdf
-            generated_pdf = docx_file.with_suffix(".pdf")
+                if result.returncode != 0:
+                    raise DocumentGeneratorError(
+                        f"LibreOffice error: {result.stderr}"
+                    )
 
-            # Si el nombre del PDF es diferente, renombrarlo
-            if generated_pdf.exists() and str(generated_pdf) != str(pdf_path):
-                shutil.move(str(generated_pdf), str(pdf_path))
+                # LibreOffice genera el PDF con el mismo nombre pero extensión .pdf
+                generated_pdf = docx_file.with_suffix(".pdf")
+
+                # Si el nombre del PDF es diferente, renombrarlo
+                import shutil
+                if generated_pdf.exists() and str(generated_pdf) != str(pdf_path):
+                    shutil.move(str(generated_pdf), str(pdf_path))
 
             if not Path(pdf_path).exists():
                 raise DocumentGeneratorError(
@@ -489,7 +493,5 @@ class DocumentGenerator:
 
             return str(pdf_path)
 
-        except subprocess.TimeoutExpired:
-            raise DocumentGeneratorError("Tiempo de espera agotado en conversión PDF")
         except Exception as e:
             raise DocumentGeneratorError(f"Error al convertir DOCX a PDF: {str(e)}")

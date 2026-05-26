@@ -9,6 +9,7 @@ alembic==1.13.1
 
 # Document Generation
 python-docx==1.1.2
+# Se mantienen pero se recomienda instalarlos con cuidado en Windows
 weasyprint==62.3
 mammoth==1.8.0
 
@@ -22,7 +23,7 @@ openpyxl==3.1.5
 aiosmtplib==3.0.1
 
 # Validation & Utils
-pydantic==2.7.4
+pydantic[email]==2.7.4
 pydantic-settings==2.3.4
 python-multipart==0.0.9
 
