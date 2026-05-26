@@ -13,10 +13,13 @@ interface ProposalEditorProps {
 }
 
 const SECTIONS = [
-  { id: 'context_content', label: 'Contexto' },
-  { id: 'scope_content', label: 'Alcance' },
-  { id: 'economic_conditions', label: 'Condiciones Económicas' },
-  { id: 'payment_terms', label: 'Forma de Pago' },
+  { id: 'context_content', label: 'Contexto', readOnly: false },
+  { id: 'scope_content', label: 'Alcance', readOnly: false },
+  { id: 'economic_conditions', label: 'Condiciones Económicas', readOnly: false },
+  { id: 'payment_terms', label: 'Forma de Pago', readOnly: false },
+  { id: 'excluded_services', label: 'Servicios Excluidos', readOnly: false },
+  { id: 'ip_section', label: 'Propiedad Intelectual', readOnly: false },
+  { id: 'letter_content', label: 'Carta de Presentación', readOnly: true },
 ]
 
 const MenuBar = ({ editor }: { editor: any }) => {
@@ -120,7 +123,9 @@ const ProposalEditor: React.FC<ProposalEditorProps> = ({ proposalId, initialCont
   // Update editor content when switching tabs
   useEffect(() => {
     if (editor && activeTab) {
+      const section = SECTIONS.find((s) => s.id === activeTab)
       editor.commands.setContent(contents[activeTab] || '')
+      editor.setEditable(!section?.readOnly)
     }
   }, [activeTab, editor])
 
@@ -138,10 +143,12 @@ const ProposalEditor: React.FC<ProposalEditorProps> = ({ proposalId, initialCont
     }
   }
 
+  const activeSection = SECTIONS.find((s) => s.id === activeTab)
+
   return (
     <div className="bg-white rounded-lg shadow border overflow-hidden">
       <div className="flex justify-between items-center bg-gray-100 px-4 py-2 border-b">
-        <div className="flex space-x-1">
+        <div className="flex space-x-1 overflow-x-auto">
           {SECTIONS.map((section) => (
             <button
               key={section.id}
@@ -177,6 +184,12 @@ const ProposalEditor: React.FC<ProposalEditorProps> = ({ proposalId, initialCont
       </div>
 
       <div className="flex flex-col">
+        {activeSection?.readOnly && (
+          <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-2 text-sm text-yellow-800 flex items-center">
+            <span className="mr-2">⚠️</span>
+            Esta sección es generada automáticamente por Innti. No se puede editar manualmente.
+          </div>
+        )}
         <MenuBar editor={editor} />
         <div className="border-t bg-white">
           <EditorContent editor={editor} />

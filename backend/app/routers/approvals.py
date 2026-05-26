@@ -41,8 +41,16 @@ def submit_for_review(
             proposal.status = ProposalStatus.PENDING_VP
             db.commit()
             db.refresh(proposal)
+        elif proposal.status == ProposalStatus.APPROVED:
+            # Transición a SENT_TO_CLIENT
+            proposal = service.mark_sent_to_client(db, proposal_id)
+        elif proposal.status == ProposalStatus.REJECTED:
+            # Volver a DRAFT
+            proposal.status = ProposalStatus.DRAFT
+            db.commit()
+            db.refresh(proposal)
         else:
-            raise HTTPException(status_code=400, detail=f"No se puede enviar a revisión desde {proposal.status}")
+            raise HTTPException(status_code=400, detail=f"No se puede avanzar desde {proposal.status}")
             
         return {"message": "Propuesta avanzada en el flujo", "status": proposal.status}
     except ApprovalError as e:

@@ -146,3 +146,19 @@ class ApprovalService:
         db.commit()
         db.refresh(proposal)
         return proposal
+
+    def mark_sent_to_client(self, db: Session, proposal_id: int) -> Proposal:
+        """Marca una propuesta como enviada al cliente."""
+        proposal = db.query(Proposal).filter(Proposal.id == proposal_id).first()
+        if not proposal:
+            raise ApprovalError(f"Propuesta {proposal_id} no encontrada")
+
+        if not self.can_transition(proposal.status, ProposalStatus.SENT_TO_CLIENT):
+            raise InvalidTransitionError(
+                f"No se puede marcar como enviada desde estado '{proposal.status}'"
+            )
+
+        proposal.status = ProposalStatus.SENT_TO_CLIENT
+        db.commit()
+        db.refresh(proposal)
+        return proposal

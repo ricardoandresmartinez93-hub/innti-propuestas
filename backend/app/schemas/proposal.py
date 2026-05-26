@@ -112,6 +112,7 @@ class ApprovalRead(BaseModel):
     proposal_id: int
     role: ApprovalRole
     approver_name: str
+    approver_email: Optional[str] = None
     action: ApprovalAction
     comments: Optional[str] = None
     created_at: datetime

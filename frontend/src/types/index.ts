@@ -114,3 +114,39 @@ export interface ProposalCreate {
   products: Omit<ProposalProduct, 'id'>[]
   schemes: Omit<ProposalScheme, 'id'>[]
 }
+
+// --- Aprobaciones ---
+export type ApprovalRole = 'reviewer' | 'vp'
+export type ApprovalAction = 'approved' | 'rejected'
+
+export interface Approval {
+  id: number
+  proposal_id: number
+  role: ApprovalRole
+  approver_name: string
+  approver_email?: string
+  action: ApprovalAction
+  comments?: string
+  created_at: string
+}
+
+export interface ApproveRequest {
+  approver_name: string
+  approver_email?: string
+  role: ApprovalRole
+  action: ApprovalAction // valor siempre 'approved'
+  comments?: string
+}
+
+export interface RejectRequest {
+  approver_name: string
+  approver_email?: string
+  role: ApprovalRole
+  action: ApprovalAction // valor siempre 'rejected'
+  comments: string // obligatorio al rechazar
+}
+
+export const ROLE_LABELS: Record<ApprovalRole, string> = {
+  reviewer: 'Revisora (Ángela)',
+  vp: 'VP (Juan Pablo)',
+}

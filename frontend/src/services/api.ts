@@ -2,7 +2,16 @@
  * Cliente API para comunicación con el backend.
  */
 import axios from 'axios'
-import type { PortfolioProduct, Proposal, ProposalCreate, Client, ClientCreate } from '../types'
+import type {
+  PortfolioProduct,
+  Proposal,
+  ProposalCreate,
+  Client,
+  ClientCreate,
+  Approval,
+  ApproveRequest,
+  RejectRequest,
+} from '../types'
 
 const api = axios.create({
   baseURL: '/api',
@@ -40,6 +49,18 @@ export const proposalApi = {
     api.delete(`/proposals/${id}`),
 
   submitForReview: (id: number) =>
+    api.post(`/proposals/${id}/submit-review`),
+
+  approve: (id: number, data: ApproveRequest) =>
+    api.post<Approval>(`/proposals/${id}/approve`, data),
+
+  reject: (id: number, data: RejectRequest) =>
+    api.post<Approval>(`/proposals/${id}/reject`, data),
+
+  getApprovals: (id: number) =>
+    api.get<Approval[]>(`/proposals/${id}/approvals`),
+
+  markSentToClient: (id: number) =>
     api.post(`/proposals/${id}/submit-review`),
 
   generateDocument: (id: number, useInnti = true) =>

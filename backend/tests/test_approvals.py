@@ -113,3 +113,19 @@ class TestApprovalService:
         service = ApprovalService()
         with pytest.raises(ApprovalError, match="no encontrada"):
             service.submit_for_review(db_session, 99999)
+
+    def test_mark_sent_to_client(self, db_session):
+        """Debe permitir marcar como enviada desde APPROVED."""
+        service = ApprovalService()
+        proposal = self._create_proposal(db_session, status=ProposalStatus.APPROVED)
+
+        result = service.mark_sent_to_client(db_session, proposal.id)
+        assert result.status == ProposalStatus.SENT_TO_CLIENT
+
+    def test_mark_sent_to_client_invalid_state(self, db_session):
+        """No debe permitir marcar como enviada desde DRAFT."""
+        service = ApprovalService()
+        proposal = self._create_proposal(db_session, status=ProposalStatus.DRAFT)
+
+        with pytest.raises(InvalidTransitionError):
+            service.mark_sent_to_client(db_session, proposal.id)
