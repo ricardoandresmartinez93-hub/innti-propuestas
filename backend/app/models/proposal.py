@@ -25,8 +25,12 @@ class SchemeType(str, enum.Enum):
     LICENSING = "licensing"                   # Licenciamiento
     SERVICES = "services"                     # Prestación de Servicios
     SUPPORT_MAINTENANCE = "support_maintenance"  # Soporte y Mantenimiento
-    CONCESSION_BPO = "concession_bpo"         # Concesión o BPO
-    SUPPLY = "supply"                         # Suministro
+    CONCESSION_BPO = "concession_bpo"         # Fase 2 – No disponible en MVP
+    SUPPLY = "supply"                         # Fase 2 – No disponible en MVP
+
+
+MVP_SCHEME_TYPES = {SchemeType.LICENSING, SchemeType.SERVICES, SchemeType.SUPPORT_MAINTENANCE}
+"""Esquemas disponibles en el MVP. Concesión/BPO y Suministro son para versiones futuras."""
 
 
 class Proposal(Base):

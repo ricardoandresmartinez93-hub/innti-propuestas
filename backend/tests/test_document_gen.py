@@ -122,3 +122,39 @@ class TestDocumentGenerator:
         assert "no será propietario" in text_lic
         # Servicios: "derecho de uso durante la vigencia"
         assert "derecho de uso durante la vigencia" in text_svc
+
+    def test_ip_section_support_maintenance(self):
+        """El texto de soporte y mantenimiento debe contener 'soporte' y 'mantenimiento'."""
+        gen = DocumentGenerator()
+        doc = gen.generate_proposal_docx(
+            title="T", client_name="C", client_position="",
+            client_entity="E", client_city="B",
+            scheme_types=["support_maintenance"],
+            products=[], context_text="", scope_text="", letter_text="",
+        )
+        full_text = "\n".join(p.text for p in doc.paragraphs)
+        assert "soporte" in full_text.lower()
+        assert "mantenimiento" in full_text.lower()
+
+    def test_economic_table_has_correct_structure(self):
+        """El documento generado debe tener una tabla con filas que contengan 'Subtotal', 'IVA' y 'Total'."""
+        gen = DocumentGenerator()
+        doc = gen.generate_proposal_docx(
+            title="T", client_name="C", client_position="",
+            client_entity="E", client_city="B",
+            scheme_types=["licensing"],
+            products=[], context_text="", scope_text="", letter_text="",
+        )
+        
+        # Buscar la tabla que contiene los totales
+        found = False
+        for table in doc.tables:
+            text = ""
+            for row in table.rows:
+                for cell in row.cells:
+                    text += cell.text + " "
+            if "Subtotal" in text and "IVA (19%)" in text and "Total" in text:
+                found = True
+                break
+        
+        assert found is True

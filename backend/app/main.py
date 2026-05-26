@@ -2,15 +2,30 @@
 Punto de entrada de la aplicación FastAPI.
 Innti Propuestas - Software de Gestión de Propuestas Comerciales de Quipux.
 """
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.database import init_db
-from app.routers import portfolio, proposals, approvals, documents, clients
+from app.routers import portfolio, proposals, approvals, documents, clients, users
 from app.middleware.error_handler import register_error_handlers
 
 settings = get_settings()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Maneja eventos del ciclo de vida de la aplicación.
+    startup: al iniciar, crear tablas de BD
+    shutdown: al cerrar, limpiar recursos
+    """
+    # Startup
+    init_db()
+    yield
+    # Shutdown (si fuera necesario limpiar recursos)
+
 
 app = FastAPI(
     title="Innti Propuestas API",
@@ -18,6 +33,7 @@ app = FastAPI(
     version="0.1.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # Registrar handlers de errores
@@ -38,12 +54,7 @@ app.include_router(proposals.router)
 app.include_router(approvals.router)
 app.include_router(documents.router)
 app.include_router(clients.router)
-
-
-@app.on_event("startup")
-def on_startup():
-    """Inicializa la base de datos al arrancar."""
-    init_db()
+app.include_router(users.router)
 
 
 @app.get("/", tags=["Health"])

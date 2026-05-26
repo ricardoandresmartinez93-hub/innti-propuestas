@@ -1,7 +1,7 @@
 """
 Schemas Pydantic para validación de datos de Propuesta.
 """
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import Optional, List
 
@@ -26,8 +26,7 @@ class ProposalProductRead(BaseModel):
     description: Optional[str] = None
     category: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # --- Esquemas en Propuesta ---
@@ -43,8 +42,7 @@ class ProposalSchemeRead(BaseModel):
     scheme_type: SchemeType
     payment_frequency: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # --- Propuesta ---
@@ -95,8 +93,7 @@ class ProposalRead(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # --- Aprobaciones ---
@@ -119,5 +116,4 @@ class ApprovalRead(BaseModel):
     comments: Optional[str] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

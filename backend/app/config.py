@@ -3,7 +3,9 @@ Configuración centralizada del proyecto.
 Todas las variables de entorno se cargan aquí.
 """
 from pydantic_settings import BaseSettings
+from pydantic import ConfigDict
 from functools import lru_cache
+from pathlib import Path
 
 
 class Settings(BaseSettings):
@@ -24,8 +26,8 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from: str = ""
 
-    # Portafolio
-    portfolio_file_path: str = "../../../ListaPortafolio.xlsx"
+    # Portafolio - ruta relativa desde la carpeta backend
+    portfolio_file_path: str = "../ListaPortafolio.xlsx"
 
     # App
     app_host: str = "0.0.0.0"
@@ -33,9 +35,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173"
     debug: bool = True
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    model_config = ConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
 @lru_cache()

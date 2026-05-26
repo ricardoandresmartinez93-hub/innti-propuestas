@@ -42,10 +42,23 @@ class PortfolioService:
 
     def _validate_file(self) -> None:
         """Valida que el archivo de portafolio existe."""
-        if not self.file_path.exists():
+        # Resolver ruta relativa desde la ubicación de este script
+        if not self.file_path.is_absolute():
+            # Si es relativa, resolverla desde la carpeta backend
+            service_dir = Path(__file__).parent.parent.parent
+            resolved_path = service_dir / self.file_path
+        else:
+            resolved_path = self.file_path
+
+        if not resolved_path.exists():
             raise PortfolioNotFoundError(
-                f"Archivo de portafolio no encontrado: {self.file_path}"
+                f"Archivo de portafolio no encontrado: {resolved_path}\n"
+                f"Ruta original: {self.file_path}\n"
+                f"Buscó en: {resolved_path}"
             )
+
+        # Actualizar la ruta interna a la resuelta
+        self.file_path = resolved_path
 
     def load_products(self) -> List[PortfolioProduct]:
         """Carga todos los productos del portafolio desde el Excel."""

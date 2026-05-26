@@ -57,6 +57,20 @@ class DocumentGenerator:
         "son propiedad intelectual de Quipux S.A.S. El cliente tendrá derecho de uso durante "
         "la vigencia del contrato."
     )
+    # PLACEHOLDER – Reemplazar con texto oficial de Jurídica cuando lo entregue el área legal
+    IP_SUPPORT_MAINTENANCE = (
+        "Las soluciones objeto de soporte y mantenimiento son propiedad intelectual de Quipux S.A.S. "
+        "El cliente tiene derecho a recibir las actualizaciones y parches incluidos en el contrato. "
+        "La prestación del servicio de soporte no transfiere ningún derecho de propiedad intelectual "
+        "sobre el software base al cliente."
+    )
+    # PLACEHOLDER – Reemplazar con texto oficial de Jurídica cuando lo entregue el área legal
+    IP_SAAS = (
+        "El software es provisto bajo la modalidad de Software como Servicio (SaaS) hospedado en la "
+        "infraestructura de Quipux S.A.S. El cliente accede al uso de la plataforma a través de internet "
+        "sin necesidad de instalación local. Quipux retiene todos los derechos de propiedad intelectual "
+        "sobre la plataforma, bases de datos y herramientas relacionadas."
+    )
 
     def _add_page_number(self, paragraph):
         """Añade numeración de página al párrafo."""
@@ -81,6 +95,65 @@ class DocumentGenerator:
         fldChar.set(qn('w:fldCharType'), 'end')
         run._r.append(fldChar)
 
+    @classmethod
+    def get_payment_type_from_scheme(cls, scheme_type: str) -> str:
+        """Mapea el tipo de esquema a un tipo de pago en español."""
+        mapping = {
+            "licensing": "pago único",
+            "services": "pago mensual",
+            "support_maintenance": "pago anual"
+        }
+        return mapping.get(scheme_type.lower(), "por definir")
+
+    def _add_economic_conditions_table(self, doc, payment_type: str):
+        """
+        Agrega una tabla de condiciones económicas con el formato estándar de Quipux.
+        """
+        table = doc.add_table(rows=1, cols=2)
+        table.style = 'Table Grid'
+        
+        # Encabezado
+        hdr_cells = table.rows[0].cells
+        hdr_cells[0].text = 'Concepto'
+        hdr_cells[1].text = 'Valor'
+        
+        # Aplicar estilo al encabezado (Azul Quipux #1a365d, texto blanco)
+        for cell in hdr_cells:
+            tc = cell._tc
+            tcPr = tc.get_or_add_tcPr()
+            shd = OxmlElement('w:shd')
+            shd.set(qn('w:fill'), '1A365D')
+            tcPr.append(shd)
+            
+            p = cell.paragraphs[0]
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run = p.runs[0]
+            run.font.bold = True
+            run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+
+        # 3 filas vacías con placeholders
+        for _ in range(3):
+            row_cells = table.add_row().cells
+            row_cells[0].text = '[Concepto]'
+            row_cells[1].text = '$0'
+
+        # Totales
+        totals = [
+            ("Subtotal", "$0"),
+            ("IVA (19%)", "$0"),
+            ("Total", "$0")
+        ]
+        
+        for label, val in totals:
+            row_cells = table.add_row().cells
+            row_cells[0].text = label
+            row_cells[1].text = val
+            row_cells[0].paragraphs[0].runs[0].font.bold = True
+
+        # Párrafo de forma de pago
+        p = doc.add_paragraph()
+        p.add_run(f"\nForma de Pago: {payment_type}")
+
     def generate_proposal_docx(
         self,
         title: str,
@@ -95,6 +168,7 @@ class DocumentGenerator:
         letter_text: str,
         economic_conditions: Optional[str] = None,
         payment_terms: Optional[str] = None,
+        payment_frequency: Optional[str] = None,
     ) -> Document:
         """
         Genera el documento Word de la propuesta comercial con formato profesional Quipux.
@@ -251,10 +325,8 @@ class DocumentGenerator:
         if economic_conditions:
             doc.add_paragraph(economic_conditions)
         else:
-            doc.add_paragraph(
-                "[SECCIÓN DE EDICIÓN MANUAL - Agregar tablas de valorización, "
-                "subtotales, IVA, valor total y formas de pago]"
-            )
+            p_type = self.get_payment_type_from_scheme(scheme_types[0] if scheme_types else "")
+            self._add_economic_conditions_table(doc, p_type)
 
         if payment_terms:
             doc.add_heading("Forma de Pago", level=2)
@@ -275,8 +347,35 @@ class DocumentGenerator:
         doc.add_heading("5. ESQUEMA DE LICENCIAMIENTO Y PRESTACIÓN DE SERVICIO", level=1)
         
         doc.add_heading("5.1. Propiedad Intelectual", level=2)
-        ip_text = self.IP_LICENSING if is_licensing else self.IP_SERVICES
-        doc.add_paragraph(ip_text)
+        
+        added_ips = set()
+        for scheme in scheme_types:
+            scheme_lower = scheme.lower()
+            if "licensing" in scheme_lower and "IP_LICENSING" not in added_ips:
+                if len(scheme_types) > 1:
+                    p = doc.add_paragraph()
+                    p.add_run("Licenciamiento:").bold = True
+                doc.add_paragraph(self.IP_LICENSING)
+                added_ips.add("IP_LICENSING")
+            
+            elif "support_maintenance" in scheme_lower and "IP_SUPPORT" not in added_ips:
+                if len(scheme_types) > 1:
+                    p = doc.add_paragraph()
+                    p.add_run("Soporte y Mantenimiento:").bold = True
+                doc.add_paragraph(self.IP_SUPPORT_MAINTENANCE)
+                added_ips.add("IP_SUPPORT")
+            
+            elif "services" in scheme_lower and "IP_SERVICES" not in added_ips:
+                if len(scheme_types) > 1:
+                    p = doc.add_paragraph()
+                    p.add_run("Prestación de Servicios:").bold = True
+                
+                # Decidir si es SaaS o Servicios estándar
+                if payment_frequency == "mensual":
+                    doc.add_paragraph(self.IP_SAAS)
+                else:
+                    doc.add_paragraph(self.IP_SERVICES)
+                added_ips.add("IP_SERVICES")
 
         doc.add_heading("5.2. Confidencialidad", level=2)
         doc.add_paragraph(self.CONFIDENTIALITY_TEXT)
@@ -333,7 +432,7 @@ class DocumentGenerator:
 
     def convert_docx_to_pdf(self, docx_path: str, pdf_path: str) -> str:
         """
-        Convierte un archivo .docx a PDF usando mammoth para HTML y WeasyPrint para PDF.
+        Convierte un archivo .docx a PDF usando LibreOffice (más confiable que WeasyPrint).
 
         Args:
             docx_path: Ruta al archivo .docx
@@ -342,47 +441,55 @@ class DocumentGenerator:
         Returns:
             Ruta del PDF generado.
         """
-        # Imports diferidos: WeasyPrint carga librerías nativas del sistema
-        # (GTK / Pango / Cairo / gobject) en el momento de importarse. Si se
-        # importara a nivel de módulo, el backend COMPLETO no podría arrancar en
-        # equipos que no tengan esas librerías instaladas (caso típico en Windows).
-        # Con el import aquí, solo este endpoint falla si faltan las librerías.
-        import mammoth
-        from weasyprint import HTML
+        import subprocess
+        import shutil
 
         docx_file = Path(docx_path)
         if not docx_file.exists():
             raise DocumentGeneratorError(f"El archivo no existe: {docx_path}")
 
         try:
-            # 1. Convertir DOCX a HTML usando mammoth
-            with open(docx_path, "rb") as docx_f:
-                result = mammoth.convert_to_html(docx_f)
-                html_content = result.value
-                # result.messages contiene advertencias si las hay
+            # Usar LibreOffice para convertir DOCX a PDF
+            # --headless: modo sin interfaz gráfica
+            # --convert-to pdf: especificar formato de salida
+            # --outdir: directorio de salida
 
-            # 2. Generar PDF desde HTML usando WeasyPrint
-            # Añadimos un poco de CSS básico para que se vea mejor
-            styled_html = f"""
-            <html>
-                <head>
-                    <style>
-                        body {{ font-family: 'Calibri', sans-serif; line-height: 1.5; }}
-                        h1 {{ color: #000; text-align: center; }}
-                        table {{ border-collapse: collapse; width: 100%; }}
-                        table, th, td {{ border: 1px solid black; padding: 8px; }}
-                        img {{ max-width: 100%; }}
-                    </style>
-                </head>
-                <body>
-                    {html_content}
-                </body>
-            </html>
-            """
-            
-            HTML(string=styled_html).write_pdf(pdf_path)
-            
+            pdf_dir = Path(pdf_path).parent
+            pdf_dir.mkdir(parents=True, exist_ok=True)
+
+            result = subprocess.run(
+                [
+                    "libreoffice",
+                    "--headless",
+                    "--convert-to", "pdf",
+                    "--outdir", str(pdf_dir),
+                    str(docx_path)
+                ],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+
+            if result.returncode != 0:
+                raise DocumentGeneratorError(
+                    f"LibreOffice error: {result.stderr}"
+                )
+
+            # LibreOffice genera el PDF con el mismo nombre pero extensión .pdf
+            generated_pdf = docx_file.with_suffix(".pdf")
+
+            # Si el nombre del PDF es diferente, renombrarlo
+            if generated_pdf.exists() and str(generated_pdf) != str(pdf_path):
+                shutil.move(str(generated_pdf), str(pdf_path))
+
+            if not Path(pdf_path).exists():
+                raise DocumentGeneratorError(
+                    f"El PDF no fue generado correctamente"
+                )
+
             return str(pdf_path)
 
+        except subprocess.TimeoutExpired:
+            raise DocumentGeneratorError("Tiempo de espera agotado en conversión PDF")
         except Exception as e:
             raise DocumentGeneratorError(f"Error al convertir DOCX a PDF: {str(e)}")

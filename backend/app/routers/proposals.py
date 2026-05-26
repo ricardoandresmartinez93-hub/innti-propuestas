@@ -6,7 +6,9 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from app.database import get_db
-from app.models.proposal import Proposal, ProposalProduct, ProposalScheme, ProposalStatus
+from app.models.proposal import (
+    Proposal, ProposalProduct, ProposalScheme, ProposalStatus, SchemeType, MVP_SCHEME_TYPES
+)
 from app.models.client import Client
 from app.schemas.proposal import (
     ProposalCreate, ProposalRead, ProposalUpdate, ProposalProductCreate, ProposalProductRead
@@ -18,6 +20,15 @@ router = APIRouter(prefix="/api/proposals", tags=["Propuestas"])
 @router.post("/", response_model=ProposalRead, status_code=status.HTTP_201_CREATED)
 def create_proposal(data: ProposalCreate, db: Session = Depends(get_db)):
     """Crea una nueva propuesta comercial."""
+    # Validar esquemas MVP
+    for scheme in data.schemes:
+        if scheme.scheme_type not in MVP_SCHEME_TYPES:
+            raise HTTPException(
+                status_code=422,  # HTTP 422 Unprocessable Content (deprecó UNPROCESSABLE_ENTITY)
+                detail=f"El esquema '{scheme.scheme_type}' no está disponible en el MVP. "
+                       f"Esquemas válidos: licensing, services, support_maintenance"
+            )
+
     # Verificar que el cliente existe
     client = db.query(Client).filter(Client.id == data.client_id).first()
     if not client:
