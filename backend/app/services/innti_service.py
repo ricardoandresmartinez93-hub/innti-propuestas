@@ -136,3 +136,85 @@ class InntiService:
             f"implícitas en la descripción base."
         )
         return self.generate_text(system_prompt, user_prompt, max_tokens=800)
+
+    def generate_validity_section(self, scheme_type: str) -> str:
+        """
+        Genera el plazo/vigencia de la propuesta según el esquema de pago.
+        scheme_type: 'licensing' | 'services' | 'support_maintenance'
+        """
+        system_prompt = (
+            "Eres un redactor de propuestas comerciales de Quipux S.A.S. "
+            "Escribe en español formal y profesional."
+        )
+        user_prompt = (
+            f"Genera la sección de PLAZO/VIGENCIA para una propuesta de tipo '{scheme_type}'. "
+            f"Debe indicar: duración sugerida, fecha de inicio y condiciones de prórroga. "
+            f"Extensión: 1-2 párrafos. Retornar HTML (p, strong). No incluir título de sección."
+        )
+        return self.generate_text(system_prompt, user_prompt)
+
+    def generate_economic_conditions_section(
+        self, products: List[str], scheme_type: str, scheme_label: str
+    ) -> str:
+        """
+        Genera descripción narrativa de las condiciones económicas.
+        """
+        system_prompt = (
+            "Eres un redactor de propuestas comerciales de Quipux S.A.S. "
+            "Escribe en español formal y profesional."
+        )
+        products_list = ", ".join(products)
+        user_prompt = (
+            f"Genera la sección de CONDICIONES ECONÓMICAS para una propuesta de '{scheme_label}' "
+            f"({scheme_type}) que incluye: {products_list}. "
+            f"Describe el modelo de negocio, indica que los valores están en la tabla adjunta "
+            f"y que incluyen IVA. Extensión: 1-2 párrafos. Retornar HTML. No incluir título de sección."
+        )
+        return self.generate_text(system_prompt, user_prompt)
+
+    def generate_payment_terms_section(self, scheme_type: str) -> str:
+        """
+        Genera la sección de forma/términos de pago según el esquema.
+        """
+        system_prompt = (
+            "Eres un redactor de propuestas comerciales de Quipux S.A.S. "
+            "Escribe en español formal y profesional."
+        )
+        user_prompt = (
+            f"Genera la sección de FORMA DE PAGO para un esquema de '{scheme_type}'. "
+            f"Si es 'licensing', mencionar anticipo y contraentrega. Si es 'services', facturación mensual. "
+            f"Si es 'support_maintenance', facturación anual. "
+            f"Extensión: 1-2 párrafos. Retornar HTML. No incluir título de sección."
+        )
+        return self.generate_text(system_prompt, user_prompt)
+
+    def generate_excluded_services_section(self) -> str:
+        """
+        Genera la introducción narrativa para los servicios excluidos.
+        """
+        system_prompt = (
+            "Eres un redactor de propuestas comerciales de Quipux S.A.S. "
+            "Escribe en español formal y profesional."
+        )
+        user_prompt = (
+            "Genera la sección de SERVICIOS EXCLUIDOS. Indica que la propuesta no cubre ciertos servicios "
+            "y lista los más relevantes (infraestructura del cliente, código fuente, migraciones, etc.). "
+            "Extensión: 1 párrafo seguido de una lista con viñetas (ul/li). Retornar HTML. No incluir título de sección."
+        )
+        return self.generate_text(system_prompt, user_prompt)
+
+    def generate_ip_section(self, client_entity: str) -> str:
+        """
+        Genera la sección de Propiedad Intelectual personalizada para el cliente.
+        """
+        system_prompt = (
+            "Eres un redactor de propuestas comerciales de Quipux S.A.S. "
+            "Escribe en español formal y profesional."
+        )
+        user_prompt = (
+            f"Genera la sección de PROPIEDAD INTELECTUAL para el cliente '{client_entity}'. "
+            f"Menciona que Quipux retiene todos los derechos sobre el software y diseños, "
+            f"y que el cliente no adquiere derechos de autor. "
+            f"Extensión: 1 párrafo. Retornar HTML. No incluir título de sección."
+        )
+        return self.generate_text(system_prompt, user_prompt)

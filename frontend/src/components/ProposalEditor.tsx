@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useImperativeHandle, forwardRef } from 'react'
-import { useEditor, EditorContent } from '@tiptap/react'
+import { useEditor, EditorContent, Editor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Table from '@tiptap/extension-table'
 import TableRow from '@tiptap/extension-table-row'
@@ -31,60 +31,106 @@ const SECTIONS = [
   { id: 'letter_content', label: 'Carta de Presentación', readOnly: true },
 ]
 
-const MenuBar = ({ editor }: { editor: any }) => {
+const MenuBar = ({ editor }: { editor: Editor | null }) => {
   if (!editor) {
     return null
   }
 
+  const isReadOnly = !editor.isEditable
+
   return (
     <div className="flex flex-wrap gap-2 p-2 border-b bg-gray-50">
       <button
-        onClick={() => editor.chain().focus().toggleBold().run()}
-        disabled={!editor.can().chain().focus().toggleBold().run()}
-        className={`px-2 py-1 rounded ${editor.isActive('bold') ? 'bg-blue-600 text-white' : 'bg-white border'}`}
+        onMouseDown={(e) => {
+          e.preventDefault()
+          editor.chain().focus().toggleBold().run()
+        }}
+        disabled={isReadOnly || !editor.can().chain().focus().toggleBold().run()}
+        className={`px-2 py-1 rounded disabled:opacity-40 disabled:cursor-not-allowed ${
+          editor.isActive('bold') ? 'bg-blue-600 text-white' : 'bg-white border'
+        }`}
       >
         B
       </button>
       <button
-        onClick={() => editor.chain().focus().toggleItalic().run()}
-        disabled={!editor.can().chain().focus().toggleItalic().run()}
-        className={`px-2 py-1 rounded ${editor.isActive('italic') ? 'bg-blue-600 text-white' : 'bg-white border'}`}
+        onMouseDown={(e) => {
+          e.preventDefault()
+          editor.chain().focus().toggleItalic().run()
+        }}
+        disabled={isReadOnly || !editor.can().chain().focus().toggleItalic().run()}
+        className={`px-2 py-1 rounded disabled:opacity-40 disabled:cursor-not-allowed ${
+          editor.isActive('italic') ? 'bg-blue-600 text-white' : 'bg-white border'
+        }`}
       >
         I
       </button>
       <button
-        onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-        className={`px-2 py-1 rounded ${editor.isActive('heading', { level: 1 }) ? 'bg-blue-600 text-white' : 'bg-white border'}`}
+        onMouseDown={(e) => {
+          e.preventDefault()
+          editor.chain().focus().toggleHeading({ level: 1 }).run()
+        }}
+        disabled={isReadOnly || !editor.can().chain().focus().toggleHeading({ level: 1 }).run()}
+        className={`px-2 py-1 rounded disabled:opacity-40 disabled:cursor-not-allowed ${
+          editor.isActive('heading', { level: 1 }) ? 'bg-blue-600 text-white' : 'bg-white border'
+        }`}
       >
         H1
       </button>
       <button
-        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-        className={`px-2 py-1 rounded ${editor.isActive('heading', { level: 2 }) ? 'bg-blue-600 text-white' : 'bg-white border'}`}
+        onMouseDown={(e) => {
+          e.preventDefault()
+          editor.chain().focus().toggleHeading({ level: 2 }).run()
+        }}
+        disabled={isReadOnly || !editor.can().chain().focus().toggleHeading({ level: 2 }).run()}
+        className={`px-2 py-1 rounded disabled:opacity-40 disabled:cursor-not-allowed ${
+          editor.isActive('heading', { level: 2 }) ? 'bg-blue-600 text-white' : 'bg-white border'
+        }`}
       >
         H2
       </button>
       <button
-        onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-        className={`px-2 py-1 rounded ${editor.isActive('heading', { level: 3 }) ? 'bg-blue-600 text-white' : 'bg-white border'}`}
+        onMouseDown={(e) => {
+          e.preventDefault()
+          editor.chain().focus().toggleHeading({ level: 3 }).run()
+        }}
+        disabled={isReadOnly || !editor.can().chain().focus().toggleHeading({ level: 3 }).run()}
+        className={`px-2 py-1 rounded disabled:opacity-40 disabled:cursor-not-allowed ${
+          editor.isActive('heading', { level: 3 }) ? 'bg-blue-600 text-white' : 'bg-white border'
+        }`}
       >
         H3
       </button>
       <button
-        onClick={() => editor.chain().focus().toggleBulletList().run()}
-        className={`px-2 py-1 rounded ${editor.isActive('bulletList') ? 'bg-blue-600 text-white' : 'bg-white border'}`}
+        onMouseDown={(e) => {
+          e.preventDefault()
+          editor.chain().focus().toggleBulletList().run()
+        }}
+        disabled={isReadOnly || !editor.can().chain().focus().toggleBulletList().run()}
+        className={`px-2 py-1 rounded disabled:opacity-40 disabled:cursor-not-allowed ${
+          editor.isActive('bulletList') ? 'bg-blue-600 text-white' : 'bg-white border'
+        }`}
       >
         • List
       </button>
       <button
-        onClick={() => editor.chain().focus().toggleOrderedList().run()}
-        className={`px-2 py-1 rounded ${editor.isActive('orderedList') ? 'bg-blue-600 text-white' : 'bg-white border'}`}
+        onMouseDown={(e) => {
+          e.preventDefault()
+          editor.chain().focus().toggleOrderedList().run()
+        }}
+        disabled={isReadOnly || !editor.can().chain().focus().toggleOrderedList().run()}
+        className={`px-2 py-1 rounded disabled:opacity-40 disabled:cursor-not-allowed ${
+          editor.isActive('orderedList') ? 'bg-blue-600 text-white' : 'bg-white border'
+        }`}
       >
         1. List
       </button>
       <button
-        onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
-        className="px-2 py-1 rounded bg-white border"
+        onMouseDown={(e) => {
+          e.preventDefault()
+          editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
+        }}
+        disabled={isReadOnly}
+        className="px-2 py-1 rounded bg-white border disabled:opacity-40 disabled:cursor-not-allowed"
       >
         Tabla
       </button>

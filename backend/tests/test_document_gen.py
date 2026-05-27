@@ -142,20 +142,34 @@ class TestDocumentGenerator:
     # Sección PLAZO                                                        #
     # ------------------------------------------------------------------ #
 
-    def test_plazo_section_present(self):
-        """El documento debe contener la sección '3. PLAZO'."""
+    def test_plazo_section_present_when_content_provided(self):
+        """La sección PLAZO debe aparecer SOLO cuando se provee validity_period con contenido."""
         gen = DocumentGenerator()
         doc = gen.generate_proposal_docx(
             title="T", client_name="C", client_position="",
             client_entity="E", client_city="B",
             scheme_types=["licensing"],
             products=[], context_text="", scope_text="", letter_text="",
+            validity_period="<p>La vigencia del contrato es de 12 meses.</p>",
         )
         headings = [p.text for p in doc.paragraphs if p.style.name.startswith("Heading")]
         assert any("PLAZO" in h.upper() for h in headings)
 
+    def test_plazo_section_absent_when_no_content(self):
+        """La sección PLAZO debe OMITIRSE cuando validity_period es None o vacío."""
+        gen = DocumentGenerator()
+        doc = gen.generate_proposal_docx(
+            title="T", client_name="C", client_position="",
+            client_entity="E", client_city="B",
+            scheme_types=["licensing"],
+            products=[], context_text="", scope_text="", letter_text="",
+            # validity_period no se provee → None por defecto
+        )
+        headings = [p.text for p in doc.paragraphs if p.style.name.startswith("Heading")]
+        assert not any("PLAZO" in h.upper() for h in headings)
+
     def test_plazo_uses_custom_text(self):
-        """Si se provee validity_period, debe usarlo en vez del texto por defecto."""
+        """Si se provee validity_period, debe usarlo en el documento."""
         gen = DocumentGenerator()
         custom = "El contrato tendrá vigencia de 12 meses."
         doc = gen.generate_proposal_docx(
@@ -168,8 +182,8 @@ class TestDocumentGenerator:
         full_text = _full_text(doc)
         assert custom in full_text
 
-    def test_plazo_uses_default_text_when_not_provided(self):
-        """Si no se provee validity_period, debe usar el texto por defecto."""
+    def test_plazo_omitted_when_not_provided(self):
+        """Si no se provee validity_period, la sección PLAZO se omite por completo."""
         gen = DocumentGenerator()
         doc = gen.generate_proposal_docx(
             title="T", client_name="C", client_position="",
@@ -178,7 +192,9 @@ class TestDocumentGenerator:
             products=[], context_text="", scope_text="", letter_text="",
         )
         full_text = _full_text(doc)
-        assert "fecha de suscripción" in full_text.lower()
+        # El texto por defecto no se usa — la sección se omite completamente
+        assert "fecha de suscripción" not in full_text.lower()
+        assert "PLAZO" not in full_text
 
     # ------------------------------------------------------------------ #
     # Sección PRINCIPIOS DE PREVENCIÓN                                     #
@@ -313,11 +329,12 @@ class TestDocumentGenerator:
     def test_economic_table_has_totals(self):
         """La tabla de condiciones económicas debe tener Subtotal, IVA y Total."""
         gen = DocumentGenerator()
+        # La sección Condiciones Económicas requiere productos para mostrarse (Tarea 2)
         doc = gen.generate_proposal_docx(
             title="T", client_name="C", client_position="",
             client_entity="E", client_city="B",
             scheme_types=["licensing"],
-            products=[], context_text="", scope_text="", letter_text="",
+            products=_sample_products(), context_text="", scope_text="", letter_text="",
         )
         found = False
         for table in doc.tables:
@@ -330,11 +347,12 @@ class TestDocumentGenerator:
     def test_ipc_note_present_for_services(self):
         """Para esquema 'services' debe incluir nota de indexación IPC."""
         gen = DocumentGenerator()
+        # La nota IPC se agrega dentro de la tabla económica; requiere productos para mostrarse
         doc = gen.generate_proposal_docx(
             title="T", client_name="C", client_position="",
             client_entity="E", client_city="B",
             scheme_types=["services"],
-            products=[], context_text="", scope_text="", letter_text="",
+            products=_sample_products(), context_text="", scope_text="", letter_text="",
         )
         full_text = _full_text(doc).lower()
         assert "ipc" in full_text
@@ -347,7 +365,7 @@ class TestDocumentGenerator:
             title="T", client_name="C", client_position="",
             client_entity="E", client_city="B",
             scheme_types=["support_maintenance"],
-            products=[], context_text="", scope_text="", letter_text="",
+            products=_sample_products(), context_text="", scope_text="", letter_text="",
         )
         full_text = _full_text(doc).lower()
         assert "ipc" in full_text
@@ -389,25 +407,50 @@ class TestDocumentGenerator:
     # Numeración de secciones                                             #
     # ------------------------------------------------------------------ #
 
-    def test_section_numbering(self):
-        """Las secciones principales deben estar correctamente numeradas del 1 al 6."""
+    def test_section_numbering_with_full_content(self):
+        """Con todas las secciones con contenido, deben numerarse correlativamente desde 1."""
         gen = DocumentGenerator()
         doc = gen.generate_proposal_docx(
             title="T", client_name="C", client_position="",
             client_entity="E", client_city="B",
             scheme_types=["licensing"],
-            products=[], context_text="", scope_text="", letter_text="",
+            products=_sample_products(),
+            context_text="Contexto de prueba.",
+            scope_text="Alcance de prueba.",
+            letter_text="Carta.",
+            validity_period="<p>Vigencia de 12 meses.</p>",
+            # excluded_services=None → fallback hardcoded
         )
         headings = [p.text for p in doc.paragraphs if p.style.name == "Heading 1"]
         numbered = [h for h in headings if h and h[0].isdigit()]
-        # Debe haber al menos 6 secciones numeradas
-        assert len(numbered) >= 6
-        # Verificar que PLAZO es la sección 3
+        # Contexto=1, Alcance=2, Plazo=3, Condiciones=4, Servicios Excluidos=5, Esquema=6
+        assert len(numbered) >= 5
+        assert any("1." in h and "CONTEXTO" in h.upper() for h in numbered)
+        assert any("2." in h and "ALCANCE" in h.upper() for h in numbered)
         assert any("3." in h and "PLAZO" in h.upper() for h in numbered)
-        # Verificar que CONDICIONES es la sección 4
         assert any("4." in h and "CONDICIONES" in h.upper() for h in numbered)
-        # Verificar que SERVICIOS EXCLUIDOS es la sección 5
-        assert any("5." in h and "EXCLUIDOS" in h.upper() for h in numbered)
+
+    def test_section_renumbers_when_context_and_plazo_omitted(self):
+        """Al omitir Contexto y Plazo, las secciones restantes se renumeran sin saltos."""
+        gen = DocumentGenerator()
+        doc = gen.generate_proposal_docx(
+            title="T", client_name="C", client_position="",
+            client_entity="E", client_city="B",
+            scheme_types=["licensing"],
+            products=_sample_products(),
+            context_text="",      # omitido — sección 1 no aparece
+            scope_text="Alcance del proyecto.",
+            letter_text="",
+            validity_period=None,  # omitido — no habrá sección PLAZO
+        )
+        headings = [p.text for p in doc.paragraphs if p.style.name == "Heading 1"]
+        numbered = [h for h in headings if h and h[0].isdigit()]
+        # CONTEXTO y PLAZO no deben aparecer
+        assert not any("CONTEXTO" in h.upper() for h in numbered)
+        assert not any("PLAZO" in h.upper() for h in numbered)
+        # ALCANCE debe ser sección 1 (no 2) y CONDICIONES sección 2 (no 4)
+        assert any("1." in h and "ALCANCE" in h.upper() for h in numbered)
+        assert any("2." in h and "CONDICIONES" in h.upper() for h in numbered)
 
     # ------------------------------------------------------------------ #
     # Categorización del alcance                                          #

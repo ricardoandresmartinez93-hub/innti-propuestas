@@ -23,6 +23,25 @@ def _add_html_paragraphs(doc: Document, html_text: str) -> None:
     Párrafos completamente vacíos consecutivos se comprimen a uno solo para
     evitar espaciado excesivo.
     """
+    if not html_text:
+        return
+
+    # Si contiene <li>, manejar como lista
+    if '<li>' in html_text.lower():
+        lines = html_text.split('<li>')
+        for i, line in enumerate(lines):
+            if i == 0: # Texto antes de la primera viñeta
+                content = _strip_html(line).strip()
+                if content:
+                    doc.add_paragraph(content)
+                continue
+            
+            # Contenido de la viñeta
+            content = _strip_html(line.split('</li>')[0]).strip()
+            if content:
+                doc.add_paragraph(content, style="List Bullet")
+        return
+
     plain = _strip_html(html_text)
     lines = plain.split('\n')
     prev_empty = False
@@ -34,6 +53,17 @@ def _add_html_paragraphs(doc: Document, html_text: str) -> None:
         elif not prev_empty:
             doc.add_paragraph('')
             prev_empty = True
+
+
+def _has_content(html: Optional[str]) -> bool:
+    """
+    Devuelve True si el HTML tiene contenido real (no solo tags vacíos/whitespace).
+    Se usa para decidir si incluir una sección en el documento generado.
+    """
+    if not html:
+        return False
+    stripped = _strip_html(html).strip()
+    return len(stripped) > 0
 
 
 def _strip_html(text: str) -> str:
@@ -402,100 +432,119 @@ class DocumentGenerator:
         # ------------------------------------------------------------------ #
         # CUERPO DEL DOCUMENTO                                                 #
         # ------------------------------------------------------------------ #
+        
+        section_num = 1
 
         # 1. CONTEXTO
-        doc.add_heading("1. CONTEXTO", level=1)
-        if context_text:
+        if _has_content(context_text):
+            doc.add_heading(f"{section_num}. CONTEXTO", level=1)
             _add_html_paragraphs(doc, context_text)
+            section_num += 1
 
         # 2. ALCANCE GENERAL DE LA PROPUESTA
-        doc.add_heading("2. ALCANCE GENERAL DE LA PROPUESTA", level=1)
-        if scope_text:
-            _add_html_paragraphs(doc, scope_text)
-
-        if products:
-            doc.add_paragraph(
-                "El alcance incluye las siguientes soluciones y/o componentes:"
-            )
-            # Agrupar por categoría si los productos tienen ese campo
-            categories: dict = {}
-            for product in products:
-                cat = (product.category or "").strip()
-                categories.setdefault(cat, []).append(product)
-
-            if len(categories) == 1 and "" in categories:
-                # Sin categorías — lista plana
+        if _has_content(scope_text) or products:
+            doc.add_heading(f"{section_num}. ALCANCE GENERAL DE LA PROPUESTA", level=1)
+            if _has_content(scope_text):
+                _add_html_paragraphs(doc, scope_text)
+            
+            if products:
+                doc.add_paragraph(
+                    "El alcance incluye las siguientes soluciones y/o componentes:"
+                )
+                # Agrupar por categoría si los productos tienen ese campo
+                categories: dict = {}
                 for product in products:
-                    doc.add_paragraph(product.name, style="List Bullet")
-            else:
-                # Con categorías — subsecciones
-                for cat, cat_products in categories.items():
-                    if cat:
-                        h2_cat = doc.add_heading(cat, level=2)
-                    for product in cat_products:
-                        doc.add_paragraph(product.name, style="List Bullet")
+                    cat = (product.category or "").strip()
+                    categories.setdefault(cat, []).append(product)
 
-        doc.add_paragraph(
-            "Nota: Invitamos a leer los anexos técnicos para identificar y comprender "
-            "el alcance de cada uno de los componentes relacionados en la propuesta comercial."
-        )
+                if len(categories) == 1 and "" in categories:
+                    # Sin categorías — lista plana
+                    for product in products:
+                        doc.add_paragraph(product.name, style="List Bullet")
+                else:
+                    # Con categorías — subsecciones
+                    for cat, cat_products in categories.items():
+                        if cat:
+                            h2_cat = doc.add_heading(cat, level=2)
+                        for product in cat_products:
+                            doc.add_paragraph(product.name, style="List Bullet")
+
+            doc.add_paragraph(
+                "Nota: Invitamos a leer los anexos técnicos para identificar y comprender "
+                "el alcance de cada uno de los componentes relacionados en la propuesta comercial."
+            )
+            section_num += 1
 
         # 3. PLAZO
-        doc.add_heading("3. PLAZO", level=1)
-        if validity_period:
+        if _has_content(validity_period):
+            doc.add_heading(f"{section_num}. PLAZO", level=1)
             _add_html_paragraphs(doc, validity_period)
-        else:
-            doc.add_paragraph(self.DEFAULT_VALIDITY_TEXT)
+            section_num += 1
 
         # 4. CONDICIONES ECONÓMICAS
-        doc.add_heading("4. CONDICIONES ECONÓMICAS", level=1)
-        if economic_conditions:
-            _add_html_paragraphs(doc, economic_conditions)
-        else:
-            primary_scheme = scheme_types[0] if scheme_types else "licensing"
-            self._add_economic_conditions_table(doc, primary_scheme, products)
+        if _has_content(economic_conditions) or _has_content(payment_terms) or products:
+            doc.add_heading(f"{section_num}. CONDICIONES ECONÓMICAS", level=1)
+            if _has_content(economic_conditions):
+                _add_html_paragraphs(doc, economic_conditions)
+            else:
+                primary_scheme = scheme_types[0] if scheme_types else "licensing"
+                self._add_economic_conditions_table(doc, primary_scheme, products)
 
-        if payment_terms:
-            doc.add_heading("Facturación y forma de pago", level=2)
-            _add_html_paragraphs(doc, payment_terms)
+            if _has_content(payment_terms):
+                doc.add_heading("Facturación y forma de pago", level=2)
+                _add_html_paragraphs(doc, payment_terms)
+            section_num += 1
 
         # 5. SERVICIOS EXCLUIDOS
-        doc.add_heading("5. SERVICIOS EXCLUIDOS", level=1)
-        if excluded_services:
-            # Priorizar el contenido editado por el usuario en la BD
-            doc.add_paragraph(_strip_html(excluded_services))
-        else:
-            # Fallback: lista estándar hardcodeada
+        if _has_content(excluded_services):
+            doc.add_heading(f"{section_num}. SERVICIOS EXCLUIDOS", level=1)
+            _add_html_paragraphs(doc, excluded_services)
+            section_num += 1
+        elif excluded_services is None:
+            # Fallback para casos donde se quiera mantener el comportamiento original si no se especifica
+            doc.add_heading(f"{section_num}. SERVICIOS EXCLUIDOS", level=1)
             doc.add_paragraph("La presente propuesta no incluye los siguientes servicios:")
             for item in self.EXCLUDED_SERVICES:
                 doc.add_paragraph(item, style="List Bullet")
+            section_num += 1
+        else:
+             # Si es string vacío explícito, no incluimos la sección según Tarea 2
+             pass
 
         # 6. ESQUEMA DE PRESTACIÓN DE SERVICIOS Y LICENCIAMIENTO
-        doc.add_heading("6. ESQUEMA DE PRESTACIÓN DE SERVICIOS Y LICENCIAMIENTO", level=1)
+        # Esta sección contiene subsecciones (6.1, 6.2, 6.3, 6.4).
+        # La 6.1 (IP) es opcional según la tarea 2.
+        # Las otras (6.2, 6.3, 6.4) parecen estructurales pero la 6.1 solo se incluye si tiene contenido.
+        
+        doc.add_heading(f"{section_num}. ESQUEMA DE PRESTACIÓN DE SERVICIOS Y LICENCIAMIENTO", level=1)
 
         # 6.1 Propiedad Intelectual
-        doc.add_heading("6.1. Propiedad Intelectual", level=2)
-        if ip_section:
-            # Priorizar el contenido editado por el usuario en la BD
-            doc.add_paragraph(_strip_html(ip_section))
+        if _has_content(ip_section):
+            doc.add_heading(f"{section_num}.1. Propiedad Intelectual", level=2)
+            _add_html_paragraphs(doc, ip_section)
+        elif not ip_section and ip_section is not None:
+            # String vacío explícito -> omitir
+            pass
         else:
-            # Fallback: texto estándar hardcodeado con nombre del cliente
+            # Fallback original
+            doc.add_heading(f"{section_num}.1. Propiedad Intelectual", level=2)
             doc.add_paragraph(self.IP_TEXT.format(client_entity=client_entity))
 
         # 6.2 Confidencialidad
-        doc.add_heading("6.2. Confidencialidad", level=2)
+        doc.add_heading(f"{section_num}.2. Confidencialidad", level=2)
         doc.add_paragraph(self.CONFIDENTIALITY_TEXT.format(client_entity=client_entity))
 
         # 6.3 Principios de Prevención de Actividades Delictivas
-        doc.add_heading("6.3. Principios de Prevención de Actividades Delictivas", level=2)
+        doc.add_heading(f"{section_num}.3. Principios de Prevención de Actividades Delictivas", level=2)
         doc.add_paragraph(self.CRIME_PREVENTION_TEXT.format(client_entity=client_entity))
 
         # 6.4 Cumplimiento al Programa de Transparencia y Ética Empresarial de Quipux
         doc.add_heading(
-            "6.4. Cumplimiento al Programa de Transparencia y Ética Empresarial de Quipux",
+            f"{section_num}.4. Cumplimiento al Programa de Transparencia y Ética Empresarial de Quipux",
             level=2,
         )
         doc.add_paragraph(self.ETHICS_TEXT)
+
 
         # --- PIE DE PÁGINA (Numeración) ---
         footer = section.footer

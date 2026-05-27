@@ -60,15 +60,16 @@ def _build_proposal_docx(
     excluded_services_text = proposal.excluded_services or ""
     ip_section_text = proposal.ip_section or ""
 
-    if use_innti and not context_text:
+    if use_innti:
         try:
             innti = InntiService()
             context_text = innti.generate_context_section(
                 client.entity, proposal.title
             )
+            scheme_type_str = ", ".join(s.scheme_type.value for s in proposal.schemes)
             scope_text = innti.generate_scope_section(
                 product_names,
-                ", ".join(s.scheme_type.value for s in proposal.schemes),
+                scheme_type_str,
             )
             letter_text = innti.generate_cover_letter(
                 client.name,
@@ -76,12 +77,35 @@ def _build_proposal_docx(
                 client.entity,
                 proposal.title,
             )
+            
+            # Nuevas secciones
+            validity_period = innti.generate_validity_section(scheme_type_str)
+            economic_conditions = innti.generate_economic_conditions_section(
+                product_names, 
+                scheme_type_str,
+                " / ".join(s.scheme_type.value for s in proposal.schemes)
+            )
+            payment_terms = innti.generate_payment_terms_section(scheme_type_str)
+            excluded_services = innti.generate_excluded_services_section()
+            ip_section = innti.generate_ip_section(client.entity)
+
             # Guardar contenido generado en la propuesta
             proposal.context_content = context_text
             proposal.scope_content = scope_text
             proposal.letter_content = letter_text
+            proposal.validity_period = validity_period
+            proposal.economic_conditions = economic_conditions
+            proposal.payment_terms = payment_terms
+            proposal.excluded_services = excluded_services
+            proposal.ip_section = ip_section
+            
             db.commit()
+            
+            # Actualizar variables locales para el generador
+            excluded_services_text = excluded_services
+            ip_section_text = ip_section
         except InntiServiceError:
+
             # Fallback: continuar sin texto generado por IA
             pass
 

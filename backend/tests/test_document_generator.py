@@ -3,6 +3,7 @@ Pruebas unitarias para el generador de documentos Word.
 
 Cubre:
   - _strip_html: limpieza de contenido HTML de TipTap
+  - _has_content: detección de contenido real en HTML (Tarea 2)
   - generate_proposal_docx: lógica de fallback en secciones 5 y 6.1
   - _build_proposal_docx (router): integración con campos de BD
 """
@@ -10,7 +11,7 @@ import io
 import pytest
 from unittest.mock import MagicMock, patch
 
-from app.services.document_generator import DocumentGenerator, _strip_html
+from app.services.document_generator import DocumentGenerator, _strip_html, _has_content
 from app.services.portfolio_service import PortfolioProduct
 
 
@@ -120,6 +121,43 @@ class TestStripHtml:
 
 
 # ---------------------------------------------------------------------------
+# Tests de _has_content (Tarea 2 — helper de detección de contenido real)
+# ---------------------------------------------------------------------------
+
+class TestHasContent:
+    """Tests para la función utilitaria _has_content."""
+
+    def test_none_returns_false(self):
+        assert not _has_content(None)
+
+    def test_empty_string_returns_false(self):
+        assert not _has_content("")
+
+    def test_whitespace_only_returns_false(self):
+        assert not _has_content("   \n  ")
+
+    def test_empty_p_tag_returns_false(self):
+        """TipTap genera <p></p> en pestañas vacías; no debe considerarse contenido."""
+        assert not _has_content("<p></p>")
+
+    def test_p_with_content_returns_true(self):
+        assert _has_content("<p>Texto real</p>")
+
+    def test_plain_text_returns_true(self):
+        assert _has_content("Texto sin tags")
+
+    def test_ul_with_items_returns_true(self):
+        assert _has_content("<ul><li>Item</li></ul>")
+
+    def test_nested_empty_tags_returns_false(self):
+        """Tags anidados sin texto real no cuentan como contenido."""
+        assert not _has_content("<p><br></p>")
+
+    def test_strong_with_text_returns_true(self):
+        assert _has_content("<strong>Negrita</strong>")
+
+
+# ---------------------------------------------------------------------------
 # Tests de generate_proposal_docx — sección 5 (Servicios Excluidos)
 # ---------------------------------------------------------------------------
 
@@ -140,18 +178,19 @@ class TestSection5ExcludedServices:
         assert hardcoded_first not in text
 
     def test_fallback_to_hardcoded_when_none(self):
-        """Sin contenido en BD, debe usar la lista hardcodeada completa."""
+        """Sin contenido en BD (None), debe usar la lista hardcodeada completa."""
         hardcoded_first = DocumentGenerator.EXCLUDED_SERVICES[0]
         doc = _build_minimal_docx(excluded_services=None)
         text = _extract_text(doc)
         assert hardcoded_first in text
 
     def test_fallback_to_hardcoded_when_empty_string(self):
-        """Cadena vacía equivale a None: debe usar la lista hardcodeada."""
+        """Cadena vacía: debe omitir la sección."""
         hardcoded_first = DocumentGenerator.EXCLUDED_SERVICES[0]
         doc = _build_minimal_docx(excluded_services="")
         text = _extract_text(doc)
-        assert hardcoded_first in text
+        assert hardcoded_first not in text
+        assert "SERVICIOS EXCLUIDOS" not in text
 
     def test_strips_html_from_db_content(self):
         """El contenido HTML de TipTap llega limpio al Word."""
@@ -191,13 +230,13 @@ class TestSection61IpSection:
         assert "QUIPUX puede utilizarlos libremente" in text
 
     def test_fallback_to_hardcoded_when_empty_string(self):
-        """Cadena vacía equivale a None: debe usar el texto hardcodeado."""
+        """Cadena vacía: debe omitir la sección."""
         doc = _build_minimal_docx(ip_section="")
         text = _extract_text(doc)
-        assert "QUIPUX puede utilizarlos libremente" in text
+        assert "Propiedad Intelectual" not in text
 
     def test_client_entity_interpolated_in_fallback(self):
-        """El nombre del cliente se interpola correctamente en el fallback hardcodeado."""
+        """El nombre del cliente se interpola correctamente en el fallback hardcodeado (cuando es None)."""
         gen = DocumentGenerator()
         doc = gen.generate_proposal_docx(
             title="Test",
@@ -248,12 +287,12 @@ class TestBothFieldsTogether:
         assert "La arquitectura, los diseños técnicos" not in text
 
     def test_both_fields_empty_uses_all_hardcoded(self):
-        """Con ambos campos vacíos se usan todos los textos hardcodeados."""
+        """Con ambos campos None se usan los textos hardcodeados de fallback."""
         doc = _build_minimal_docx(excluded_services=None, ip_section=None)
         text = _extract_text(doc)
 
         assert DocumentGenerator.EXCLUDED_SERVICES[0] in text
-        assert "QUIPUX puede utilizarlos libremente" in text
+        assert "Propiedad Intelectual" in text
 
 
 # ---------------------------------------------------------------------------
@@ -390,6 +429,7 @@ class TestDocumentsRouterIntegration:
                 )
 
                 call_kwargs = mock_gen_instance.generate_proposal_docx.call_args.kwargs
-                # None en BD → cadena vacía al generador → fallback hardcoded en generator
+                # None en BD → el router lo convierte a "" antes de pasar al generador.
+                # Con "" el generador OMITE las secciones (Tarea 2: pestañas vacías no aparecen).
                 assert call_kwargs["excluded_services"] == ""
                 assert call_kwargs["ip_section"] == ""
