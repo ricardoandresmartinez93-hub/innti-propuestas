@@ -12,6 +12,7 @@ python-docx==1.1.2
 # Se mantienen pero se recomienda instalarlos con cuidado en Windows
 weasyprint==62.3
 mammoth==1.8.0
+docx2pdf==0.1.8
 
 # AI Integration (Innti via LiteLLM)
 openai==1.35.0
