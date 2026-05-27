@@ -55,6 +55,7 @@ export interface Client {
   name: string
   position?: string
   entity: string
+  country?: string
   department?: string
   city?: string
   email?: string
@@ -64,6 +65,7 @@ export interface ClientCreate {
   name: string
   position?: string
   entity: string
+  country?: string
   department?: string
   city?: string
   email?: string

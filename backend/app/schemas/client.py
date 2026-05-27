@@ -11,6 +11,7 @@ class ClientCreate(BaseModel):
     name: str
     position: Optional[str] = None
     entity: str
+    country: Optional[str] = None
     department: Optional[str] = None
     city: Optional[str] = None
     email: Optional[str] = None
@@ -22,6 +23,7 @@ class ClientRead(BaseModel):
     name: str
     position: Optional[str] = None
     entity: str
+    country: Optional[str] = None
     department: Optional[str] = None
     city: Optional[str] = None
     email: Optional[str] = None
@@ -36,6 +38,7 @@ class ClientUpdate(BaseModel):
     name: Optional[str] = None
     position: Optional[str] = None
     entity: Optional[str] = None
+    country: Optional[str] = None
     department: Optional[str] = None
     city: Optional[str] = None
     email: Optional[str] = None

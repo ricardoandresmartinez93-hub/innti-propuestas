@@ -16,6 +16,7 @@ class Client(Base):
     name = Column(String(200), nullable=False, comment="Nombre del contacto")
     position = Column(String(200), nullable=True, comment="Cargo del contacto")
     entity = Column(String(300), nullable=False, comment="Nombre de la entidad/empresa")
+    country = Column(String(100), nullable=True, comment="País del cliente")
     department = Column(String(200), nullable=True, comment="Área o departamento")
     city = Column(String(100), nullable=True, comment="Ciudad")
     email = Column(String(200), nullable=True, comment="Email del contacto")

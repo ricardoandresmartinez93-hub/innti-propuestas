@@ -224,15 +224,15 @@ export default function NewProposalPage() {
               </h3>
               
               {client ? (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-6 flex justify-between items-center">
-                  <div>
+                <div className="bg-green-50 border border-green-200 rounded-lg p-6 flex items-center gap-4">
+                  <div className="flex-1 min-w-0">
                     <h4 className="font-bold text-green-900">{client.name}</h4>
-                    <p className="text-sm text-green-800">{client.entity} - {client.position}</p>
+                    <p className="text-sm text-green-800">{client.entity}{client.city ? ` — ${client.city}` : ''}</p>
                     <p className="text-xs text-green-700 mt-1">{client.email}</p>
                   </div>
-                  <button 
+                  <button
                     onClick={() => setClient(null)}
-                    className="text-sm text-green-700 font-medium hover:underline"
+                    className="flex-shrink-0 text-sm text-green-700 font-medium hover:underline"
                   >
                     Cambiar
                   </button>

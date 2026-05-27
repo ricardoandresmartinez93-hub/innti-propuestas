@@ -103,3 +103,20 @@ def test_delete_client_not_found(client):
     """DELETE en cliente inexistente devuelve 404."""
     response = client.delete("/api/clients/99999")
     assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+def test_create_client_with_country(client, sample_client_data):
+    """Verifica que el campo country se almacena y retorna correctamente."""
+    data = {**sample_client_data, "country": "Colombia"}
+    response = client.post("/api/clients/", json=data)
+    assert response.status_code == status.HTTP_201_CREATED
+    body = response.json()
+    assert body["country"] == "Colombia"
+
+
+def test_create_client_without_country(client, sample_client_data):
+    """Verifica que country es opcional (backward-compatible)."""
+    response = client.post("/api/clients/", json=sample_client_data)
+    assert response.status_code == status.HTTP_201_CREATED
+    body = response.json()
+    assert body.get("country") is None
