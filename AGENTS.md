@@ -10,6 +10,7 @@
 - **Idiomas:** Código y comentarios técnicos en inglés. Documentación de usuario, mensajes de error para el cliente y contenido de propuestas en **español**.
 - **Seguridad:** Nunca incluir secretos en el código. Usar `.env` (jamás subirlo). Revisar `.gitignore` antes de hacer commit.
 - **Permisos de bash:** `pytest*` y `npm test*` se ejecutan sin preguntar; `uvicorn`, `npm run dev`, instalaciones requieren confirmación.
+- **Pruebas unitarias obligatorias:** Todo código nuevo — tanto en Backend como en Frontend — **debe** ir acompañado de pruebas unitarias en el mismo PR/commit. No se considera completa ninguna funcionalidad sin su cobertura de tests. Ver sección [Testing](#testing) para las convenciones de cada capa.
 
 ## Backend (FastAPI)
 - **Modelos vs Schemas:** Separación clara entre modelos de BD (`app/models/`) y schemas Pydantic (`app/schemas/`).
@@ -82,7 +83,21 @@ DRAFT ──► PENDING_REVIEW ──► REVIEWED ──► PENDING_VP ──►
 - El campo `portfolio_file_path` en `config.py` apunta a este archivo.
 
 ## Testing
-- Ejecutar desde `backend/` con el venv activado.
+
+> ⚠️ **Regla de cobertura:** Todo código nuevo (servicio, router, componente, hook, utilidad) **debe** incluir pruebas unitarias en el mismo entregable. El agente `pre-commit-validation` verifica esto antes de cada commit.
+
+### Backend (pytest)
+- Ejecutar desde `backend/` con el venv activado: `pytest tests/ -v`
 - BD de pruebas: `sqlite:///./test_innti.db` (creada/destruida por `conftest.py`).
 - `conftest.py` mockea `weasyprint` y `mammoth` con `unittest.mock.MagicMock`.
 - Fixtures principales: `db_session`, `client` (TestClient), `sample_client_data`, `sample_proposal_data`.
+- **Qué testear:** cada función en `app/services/`, cada endpoint en `app/routers/`, y cualquier utilidad nueva.
+- **Convención de archivos:** `tests/test_<módulo>.py` (ej. `tests/test_proposal_service.py`).
+- **Mocks:** usar `unittest.mock.patch` para aislar dependencias externas (Innti, WeasyPrint, sistema de archivos).
+
+### Frontend (Vitest + Testing Library)
+- Ejecutar desde `frontend/`: `npm test`
+- **Qué testear:** cada componente React nuevo, cada custom hook, y las funciones de `src/services/api.ts`.
+- **Convención de archivos:** colocar el test junto al componente como `ComponentName.test.tsx` o en `src/__tests__/`.
+- **Mocks:** usar `vi.mock` para las llamadas a la API (`src/services/api.ts`) y para módulos de terceros.
+- **No usar `any`** en los tests — respetar el tipado igual que en el código de producción.
