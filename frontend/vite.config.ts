@@ -15,6 +15,10 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
+        // Timeout generoso para endpoints de generación de documentos
+        // que pueden tardar varios segundos (python-docx + conversión PDF).
+        timeout: 120_000,
+        proxyTimeout: 120_000,
       },
     },
   },

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { proposalApi } from '../services/api'
 import {
@@ -10,11 +10,12 @@ import {
   ApproveRequest,
   RejectRequest,
 } from '../types'
-import ProposalEditor from '../components/ProposalEditor'
+import ProposalEditor, { type ProposalEditorHandle } from '../components/ProposalEditor'
 
 const ProposalDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const editorRef = useRef<ProposalEditorHandle>(null)
   const [proposal, setProposal] = useState<Proposal | null>(null)
   const [approvals, setApprovals] = useState<Approval[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -61,22 +62,51 @@ const ProposalDetailPage: React.FC = () => {
 
   const handleGenerateDocument = async (type: 'word' | 'pdf' | 'annex') => {
     if (!proposal) return
+
+    // Auto-guardar cambios pendientes antes de generar para que el backend
+    // trabaje con el contenido más reciente del editor, no con el estado de la BD.
+    if (editorRef.current?.hasUnsavedChanges) {
+      try {
+        await editorRef.current.save(true) // silent=true: sin alert de éxito
+      } catch {
+        alert('No se pudo guardar el contenido antes de generar. Guarda manualmente e intenta de nuevo.')
+        return
+      }
+    }
+
     setIsGenerating(type)
     try {
       let response
       if (type === 'annex') {
         response = await proposalApi.generateAnnex(proposal.id)
       } else if (type === 'pdf') {
-        response = await proposalApi.generatePdf(proposal.id, true)
+        // use_innti=false: solo genera con el contenido guardado en BD.
+        // La generación con IA se hace desde el botón "Generar con Innti".
+        response = await proposalApi.generatePdf(proposal.id, false)
       } else {
-        response = await proposalApi.generateDocument(proposal.id, true)
+        // use_innti=false: mismo motivo — evita llamada a Innti al descargar Word.
+        response = await proposalApi.generateDocument(proposal.id, false)
       }
-      
-      const blob = new Blob([response.data], { 
-        type: type === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' 
-      })
+
+      const mimeType =
+        type === 'pdf'
+          ? 'application/pdf'
+          : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      const extension = type === 'pdf' ? 'pdf' : 'docx'
+      const filename = `propuesta_${proposal.id}_${type}.${extension}`
+
+      const blob = new Blob([response.data], { type: mimeType })
       const url = window.URL.createObjectURL(blob)
-      window.open(url, '_blank')
+
+      // Usar <a download> en lugar de window.open para garantizar la descarga
+      // sin que los bloqueadores de popups interfieran.
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = filename
+      document.body.appendChild(anchor)
+      anchor.click()
+      document.body.removeChild(anchor)
+      window.URL.revokeObjectURL(url)
     } catch (err) {
       console.error(`Error generating ${type}:`, err)
       alert(`Error al generar el documento ${type}.`)
@@ -341,18 +371,20 @@ const ProposalDetailPage: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div className="lg:col-span-3 space-y-6">
-          <ProposalEditor 
+          <ProposalEditor
+            ref={editorRef}
             key={proposal.updated_at}
-            proposalId={proposal.id} 
+            proposalId={proposal.id}
             initialContent={{
               context_content: proposal.context_content || '',
               scope_content: proposal.scope_content || '',
+              validity_period: proposal.validity_period || '',
               economic_conditions: proposal.economic_conditions || '',
               payment_terms: proposal.payment_terms || '',
               excluded_services: proposal.excluded_services || '',
               ip_section: proposal.ip_section || '',
               letter_content: proposal.letter_content || '',
-            }} 
+            }}
           />
 
           {/* Historial de Aprobaciones */}

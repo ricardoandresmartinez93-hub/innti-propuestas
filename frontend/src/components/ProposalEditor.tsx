@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useImperativeHandle, forwardRef } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Table from '@tiptap/extension-table'
@@ -10,6 +10,14 @@ import { proposalApi } from '../services/api'
 interface ProposalEditorProps {
   proposalId: number
   initialContent: Record<string, string>
+}
+
+/** Handle expuesto al componente padre mediante forwardRef. */
+export interface ProposalEditorHandle {
+  /** Guarda el contenido actual en la BD. En modo silencioso no muestra alertas. */
+  save: (silent?: boolean) => Promise<void>
+  /** True cuando hay cambios pendientes de guardar. */
+  hasUnsavedChanges: boolean
 }
 
 const SECTIONS = [
@@ -84,7 +92,8 @@ const MenuBar = ({ editor }: { editor: any }) => {
   )
 }
 
-const ProposalEditor: React.FC<ProposalEditorProps> = ({ proposalId, initialContent }) => {
+const ProposalEditor = forwardRef<ProposalEditorHandle, ProposalEditorProps>(
+  function ProposalEditorInner({ proposalId, initialContent }, ref) {
   const [activeTab, setActiveTab] = useState(SECTIONS[0].id)
   const [contents, setContents] = useState<Record<string, string>>(initialContent)
   const [isSaving, setIsSaving] = useState(false)
@@ -130,19 +139,26 @@ const ProposalEditor: React.FC<ProposalEditorProps> = ({ proposalId, initialCont
     }
   }, [activeTab, editor])
 
-  const handleSave = async () => {
+  const handleSave = async (silent = false) => {
     setIsSaving(true)
     try {
       await proposalApi.update(proposalId, contents)
       setHasUnsavedChanges(false)
-      alert('Cambios guardados correctamente')
+      if (!silent) alert('Cambios guardados correctamente')
     } catch (error) {
       console.error('Error saving proposal:', error)
-      alert('Error al guardar los cambios')
+      if (!silent) alert('Error al guardar los cambios')
+      throw error // Necesario para que el auto-guardado del padre detecte el fallo
     } finally {
       setIsSaving(false)
     }
   }
+
+  // Exponer save() y hasUnsavedChanges al componente padre mediante ref
+  useImperativeHandle(ref, () => ({
+    save: (silent = false) => handleSave(silent),
+    hasUnsavedChanges,
+  }))
 
   const activeSection = SECTIONS.find((s) => s.id === activeTab)
 
@@ -171,7 +187,7 @@ const ProposalEditor: React.FC<ProposalEditorProps> = ({ proposalId, initialCont
             </span>
           )}
           <button
-            onClick={handleSave}
+            onClick={() => handleSave()}
             disabled={isSaving || !hasUnsavedChanges}
             className={`px-4 py-2 text-sm font-medium rounded shadow ${
               isSaving || !hasUnsavedChanges
@@ -239,5 +255,7 @@ const ProposalEditor: React.FC<ProposalEditorProps> = ({ proposalId, initialCont
     </div>
   )
 }
+
+) // fin forwardRef
 
 export default ProposalEditor

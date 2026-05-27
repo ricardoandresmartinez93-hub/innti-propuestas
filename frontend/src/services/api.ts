@@ -63,21 +63,24 @@ export const proposalApi = {
   markSentToClient: (id: number) =>
     api.post(`/proposals/${id}/submit-review`),
 
-  generateDocument: (id: number, useInnti = true) =>
+  generateDocument: (id: number, useInnti = false) =>
     api.post(`/proposals/${id}/generate-document`, null, {
       params: { use_innti: useInnti },
       responseType: 'blob',
+      timeout: 120_000, // 2 min — python-docx puede tardar con documentos grandes
     }),
 
-  generatePdf: (id: number, useInnti = true) =>
+  generatePdf: (id: number, useInnti = false) =>
     api.post(`/proposals/${id}/generate-pdf`, null, {
       params: { use_innti: useInnti },
       responseType: 'blob',
+      timeout: 120_000,
     }),
 
   generateAnnex: (id: number) =>
     api.post(`/proposals/${id}/generate-annex`, null, {
       responseType: 'blob',
+      timeout: 120_000,
     }),
 }
 

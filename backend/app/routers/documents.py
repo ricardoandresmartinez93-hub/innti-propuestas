@@ -57,6 +57,8 @@ def _build_proposal_docx(
     context_text = proposal.context_content or ""
     scope_text = proposal.scope_content or ""
     letter_text = proposal.letter_content or ""
+    excluded_services_text = proposal.excluded_services or ""
+    ip_section_text = proposal.ip_section or ""
 
     if use_innti and not context_text:
         try:
@@ -99,6 +101,8 @@ def _build_proposal_docx(
         validity_period=proposal.validity_period,
         economic_conditions=proposal.economic_conditions,
         payment_terms=proposal.payment_terms,
+        excluded_services=excluded_services_text,
+        ip_section=ip_section_text,
     )
 
     # Guardar en archivo temporal

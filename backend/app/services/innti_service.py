@@ -21,6 +21,7 @@ class InntiService:
         self.client = OpenAI(
             base_url=settings.innti_api_base,
             api_key=settings.innti_api_key,
+            timeout=30.0,  # Evitar que cuelgue indefinidamente (default SDK = 600 s)
         )
         self.model = settings.innti_model
 

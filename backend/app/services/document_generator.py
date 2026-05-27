@@ -2,6 +2,7 @@
 Servicio de generación de documentos Word y PDF.
 Genera propuestas comerciales y anexos técnicos con la estructura estándar de Quipux.
 """
+import re
 from datetime import date
 from pathlib import Path
 from typing import List, Optional
@@ -12,6 +13,53 @@ from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
 from app.services.portfolio_service import PortfolioProduct
+
+
+def _add_html_paragraphs(doc: Document, html_text: str) -> None:
+    """Convierte HTML de TipTap en párrafos Word individuales.
+
+    Cada <p> / <br> se convierte en un párrafo separado, preservando la
+    estructura de texto que el usuario vio en el editor.
+    Párrafos completamente vacíos consecutivos se comprimen a uno solo para
+    evitar espaciado excesivo.
+    """
+    plain = _strip_html(html_text)
+    lines = plain.split('\n')
+    prev_empty = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped:
+            doc.add_paragraph(stripped)
+            prev_empty = False
+        elif not prev_empty:
+            doc.add_paragraph('')
+            prev_empty = True
+
+
+def _strip_html(text: str) -> str:
+    """Elimina etiquetas HTML y decodifica entidades básicas para inserción en Word.
+
+    TipTap guarda HTML en la BD (<p>, <strong>, <ul>, etc.).
+    Esta función produce texto plano apto para doc.add_paragraph().
+    """
+    # Convertir <br> y bloques de cierre en saltos de línea para no perder separación
+    text = re.sub(r'<br\s*/?>', '\n', text, flags=re.IGNORECASE)
+    text = re.sub(r'</p>', '\n', text, flags=re.IGNORECASE)
+    text = re.sub(r'</li>', '\n', text, flags=re.IGNORECASE)
+    # Eliminar todas las demás etiquetas
+    text = re.sub(r'<[^>]+>', '', text)
+    # Decodificar entidades HTML básicas
+    text = (
+        text.replace('&nbsp;', ' ')
+            .replace('&amp;', '&')
+            .replace('&lt;', '<')
+            .replace('&gt;', '>')
+            .replace('&quot;', '"')
+            .replace('&#39;', "'")
+    )
+    # Normalizar espacios en blanco sin destruir saltos de línea intencionales
+    lines = [re.sub(r'[ \t]+', ' ', line).strip() for line in text.split('\n')]
+    return '\n'.join(line for line in lines if line)
 
 
 # Mapa de meses en español para fecha de carta
@@ -220,6 +268,8 @@ class DocumentGenerator:
         economic_conditions: Optional[str] = None,
         payment_terms: Optional[str] = None,
         payment_frequency: Optional[str] = None,
+        excluded_services: Optional[str] = None,
+        ip_section: Optional[str] = None,
     ) -> Document:
         """
         Genera el documento Word de la propuesta comercial con formato profesional Quipux.
@@ -330,7 +380,7 @@ class DocumentGenerator:
         doc.add_paragraph("")
 
         if letter_text:
-            doc.add_paragraph(letter_text)
+            _add_html_paragraphs(doc, letter_text)
         else:
             doc.add_paragraph(
                 "Estamos presentando la propuesta comercial descrita en el asunto. "
@@ -355,11 +405,13 @@ class DocumentGenerator:
 
         # 1. CONTEXTO
         doc.add_heading("1. CONTEXTO", level=1)
-        doc.add_paragraph(context_text or "")
+        if context_text:
+            _add_html_paragraphs(doc, context_text)
 
         # 2. ALCANCE GENERAL DE LA PROPUESTA
         doc.add_heading("2. ALCANCE GENERAL DE LA PROPUESTA", level=1)
-        doc.add_paragraph(scope_text or "")
+        if scope_text:
+            _add_html_paragraphs(doc, scope_text)
 
         if products:
             doc.add_paragraph(
@@ -390,32 +442,45 @@ class DocumentGenerator:
 
         # 3. PLAZO
         doc.add_heading("3. PLAZO", level=1)
-        doc.add_paragraph(validity_period or self.DEFAULT_VALIDITY_TEXT)
+        if validity_period:
+            _add_html_paragraphs(doc, validity_period)
+        else:
+            doc.add_paragraph(self.DEFAULT_VALIDITY_TEXT)
 
         # 4. CONDICIONES ECONÓMICAS
         doc.add_heading("4. CONDICIONES ECONÓMICAS", level=1)
         if economic_conditions:
-            doc.add_paragraph(economic_conditions)
+            _add_html_paragraphs(doc, economic_conditions)
         else:
             primary_scheme = scheme_types[0] if scheme_types else "licensing"
             self._add_economic_conditions_table(doc, primary_scheme, products)
 
         if payment_terms:
             doc.add_heading("Facturación y forma de pago", level=2)
-            doc.add_paragraph(payment_terms)
+            _add_html_paragraphs(doc, payment_terms)
 
         # 5. SERVICIOS EXCLUIDOS
         doc.add_heading("5. SERVICIOS EXCLUIDOS", level=1)
-        doc.add_paragraph("La presente propuesta no incluye los siguientes servicios:")
-        for item in self.EXCLUDED_SERVICES:
-            doc.add_paragraph(item, style="List Bullet")
+        if excluded_services:
+            # Priorizar el contenido editado por el usuario en la BD
+            doc.add_paragraph(_strip_html(excluded_services))
+        else:
+            # Fallback: lista estándar hardcodeada
+            doc.add_paragraph("La presente propuesta no incluye los siguientes servicios:")
+            for item in self.EXCLUDED_SERVICES:
+                doc.add_paragraph(item, style="List Bullet")
 
         # 6. ESQUEMA DE PRESTACIÓN DE SERVICIOS Y LICENCIAMIENTO
         doc.add_heading("6. ESQUEMA DE PRESTACIÓN DE SERVICIOS Y LICENCIAMIENTO", level=1)
 
-        # 6.1 Propiedad Intelectual (texto unificado con nombre del cliente)
+        # 6.1 Propiedad Intelectual
         doc.add_heading("6.1. Propiedad Intelectual", level=2)
-        doc.add_paragraph(self.IP_TEXT.format(client_entity=client_entity))
+        if ip_section:
+            # Priorizar el contenido editado por el usuario en la BD
+            doc.add_paragraph(_strip_html(ip_section))
+        else:
+            # Fallback: texto estándar hardcodeado con nombre del cliente
+            doc.add_paragraph(self.IP_TEXT.format(client_entity=client_entity))
 
         # 6.2 Confidencialidad
         doc.add_heading("6.2. Confidencialidad", level=2)
