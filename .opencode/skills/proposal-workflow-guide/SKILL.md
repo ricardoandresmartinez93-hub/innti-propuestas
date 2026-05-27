@@ -47,16 +47,17 @@ Flujo de usuario completo para crear y gestionar propuestas en Innti Propuestas.
 
 **Ubicación UI:** ProposalEditor → TipTap rich text editor
 
-El editor tiene **7 pestañas**. Comportamiento por pestaña:
+El editor tiene **8 pestañas**. Comportamiento por pestaña:
 
 | Pestaña | Campo | Editable | Generada por |
 |---------|-------|----------|--------------|
 | Contexto | `context_content` | ✅ Sí | Innti (editable post-gen) |
 | Alcance | `scope_content` | ✅ Sí | Innti (editable post-gen) |
+| **Plazo** | `validity_period` | ✅ Sí | Texto por defecto (editable) |
 | Condiciones Económicas | `economic_conditions` | ✅ Sí | Manual (obligatorio) |
 | Forma de Pago | `payment_terms` | ✅ Sí | Manual (obligatorio) |
-| Servicios Excluidos | `excluded_services` | ✅ Sí | Auto-completado según esquema |
-| Propiedad Intelectual | `ip_section` | ✅ Sí | Auto-completado según esquema |
+| Servicios Excluidos | `excluded_services` | ✅ Sí | Lista fija de 10 items (editable) |
+| Propiedad Intelectual | `ip_section` | ✅ Sí | Texto fijo con nombre cliente (editable) |
 | Carta de Presentación | `letter_content` | ❌ Solo lectura | Innti (banner amarillo ⚠️) |
 
 > El botón **Guardar** persiste todos los campos mediante `PATCH /api/proposals/{id}`.

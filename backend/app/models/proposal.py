@@ -56,6 +56,7 @@ class Proposal(Base):
     letter_content = Column(Text, nullable=True, comment="Contenido de carta de presentación")
     context_content = Column(Text, nullable=True, comment="Contenido de contexto/introducción")
     scope_content = Column(Text, nullable=True, comment="Contenido de alcance")
+    validity_period = Column(Text, nullable=True, comment="Plazo/vigencia del contrato")
     economic_conditions = Column(Text, nullable=True, comment="Condiciones económicas (edición manual)")
     payment_terms = Column(Text, nullable=True, comment="Forma de pago (edición manual)")
     excluded_services = Column(Text, nullable=True, comment="Servicios excluidos")

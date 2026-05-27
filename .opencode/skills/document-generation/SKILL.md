@@ -39,27 +39,35 @@ Se sirven como `FileResponse` de FastAPI (no como stream en memoria).
 
 ## Secciones del Documento Principal
 
-| Sección | Campo en `Proposal` | Generado por |
-|---------|---------------------|--------------|
-| Carta de presentación | `letter_content` | `InntiService.generate_cover_letter()` |
-| Contexto / Introducción | `context_content` | `InntiService.generate_context_section()` |
-| Alcance | `scope_content` | `InntiService.generate_scope_section()` |
-| Condiciones económicas | `economic_conditions` | Edición **manual** en TipTap |
-| Forma de pago | `payment_terms` | Edición manual |
-| Servicios excluidos | `excluded_services` | Auto-completado según esquema (editable) |
-| Propiedad intelectual | `ip_section` | Texto fijo según esquema (editable) |
-| Confidencialidad y ética | `confidentiality` | Texto fijo — **no editar sin jurídica** |
-| **Anexo técnico** | — | `DocumentGenerator.generate_technical_annex()` |
+| # | Sección | Campo en `Proposal` | Generado por |
+|---|---------|---------------------|--------------|
+| — | Carta de presentación | `letter_content` | `InntiService.generate_cover_letter()` |
+| 1 | Contexto | `context_content` | `InntiService.generate_context_section()` |
+| 2 | Alcance General de la Propuesta | `scope_content` | `InntiService.generate_scope_section()` |
+| 3 | **Plazo** | `validity_period` | Edición **manual** en TipTap (o texto por defecto) |
+| 4 | Condiciones Económicas | `economic_conditions` | Tabla auto con productos; o edición manual |
+| 4 | — Forma de pago | `payment_terms` | Edición manual |
+| 5 | Servicios Excluidos | `excluded_services` | Lista fija de 10 items (editable) |
+| 6.1 | Propiedad Intelectual | `ip_section` | Texto fijo unificado con nombre de cliente |
+| 6.2 | Confidencialidad | `confidentiality` | Texto fijo con nombre de cliente |
+| 6.3 | Principios de Prevención de Actividades Delictivas | — | Texto fijo con nombre de cliente |
+| 6.4 | Cumplimiento Transparencia y Ética Empresarial | — | Texto fijo (`lineaetica@quipux.com`) |
+| — | **Anexo técnico** | — | `DocumentGenerator.generate_technical_annex()` |
+
+> ⚠️ La fecha de la carta se genera **automáticamente** con `datetime.date.today()` — no requiere edición manual.
+
+> ℹ️ La nota de **indexación IPC** se agrega automáticamente para esquemas `services` y `support_maintenance`.
 
 ## Textos Fijos (Constantes en `DocumentGenerator`)
 
 No modificar sin aprobación del área jurídica de Quipux:
-- `CONFIDENTIALITY_TEXT` — Cláusula de confidencialidad
-- `ETHICS_TEXT` — Declaración de ética empresarial
-- `EXCLUDED_SERVICES_LICENSING` — Exclusiones para licenciamiento
-- `EXCLUDED_SERVICES_SUPPORT` — Exclusiones para soporte y mantenimiento
-- `IP_LICENSING` — Texto de propiedad intelectual para licenciamiento
-- `IP_SERVICES` — Texto de propiedad intelectual para servicios
+- `EXCLUDED_SERVICES` — Lista única de 10 items de servicios excluidos (igual para todos los esquemas)
+- `IP_TEXT` — Propiedad intelectual unificada (usa `{client_entity}`, reemplazado con nombre real)
+- `CONFIDENTIALITY_TEXT` — Confidencialidad (usa `{client_entity}`)
+- `CRIME_PREVENTION_TEXT` — Principios de prevención de actividades delictivas (usa `{client_entity}`)
+- `ETHICS_TEXT` — Referencia a `lineaetica@quipux.com`
+- `IPC_INDEXATION_TEXT` — Nota de indexación IPC (solo services/support_maintenance)
+- `DEFAULT_VALIDITY_TEXT` — Texto de plazo cuando no se edita manualmente
 
 ## Modo `combine_schemes`
 

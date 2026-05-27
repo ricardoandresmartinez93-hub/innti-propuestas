@@ -2,6 +2,7 @@
 Servicio de generación de documentos Word y PDF.
 Genera propuestas comerciales y anexos técnicos con la estructura estándar de Quipux.
 """
+from datetime import date
 from pathlib import Path
 from typing import List, Optional
 from docx import Document
@@ -13,6 +14,14 @@ from docx.oxml import OxmlElement
 from app.services.portfolio_service import PortfolioProduct
 
 
+# Mapa de meses en español para fecha de carta
+_MONTHS_ES = {
+    1: "enero", 2: "febrero", 3: "marzo", 4: "abril",
+    5: "mayo", 6: "junio", 7: "julio", 8: "agosto",
+    9: "septiembre", 10: "octubre", 11: "noviembre", 12: "diciembre",
+}
+
+
 class DocumentGeneratorError(Exception):
     """Error en la generación de documentos."""
     pass
@@ -21,75 +30,90 @@ class DocumentGeneratorError(Exception):
 class DocumentGenerator:
     """Genera documentos Word con la estructura estándar de propuestas Quipux."""
 
-    # Textos fijos (constantes de la empresa)
+    # ------------------------------------------------------------------ #
+    # Textos fijos (basados en propuestas reales de la empresa)            #
+    # ------------------------------------------------------------------ #
+
+    # Lista unificada de servicios excluidos (igual en todos los esquemas)
+    EXCLUDED_SERVICES = [
+        "Infraestructura tecnológica centralizada (su suministro y mantenimiento es responsabilidad del cliente).",
+        "Desarrollo e implantación de nuevas funcionalidades no incluidas en el alcance de la propuesta.",
+        "Solución a dudas sobre la operación de sistemas diferentes a los ofertados en la presente propuesta.",
+        "Actualización de versión del motor de base de datos y su respectivo mantenimiento.",
+        "Procesos de configuración de redes, servidores, equipos, impresoras, sistemas operativos y comunicaciones.",
+        "Interrogantes sobre el modelo de datos, diccionario de datos y características de programación de las "
+        "soluciones (considerados confidenciales).",
+        "Suministro de código fuente, modelos de datos o documentación técnica considerada confidencial.",
+        "Asesoría para la solución de errores o mala operación provocados por factores externos al alcance del contrato.",
+        "Corrección de fallas originadas por defectos de hardware, redes o instalaciones locativas "
+        "(responsabilidad del cliente).",
+        "Realizaciones de migraciones, cruces y depuraciones de información de bases de datos u otras "
+        "actividades análogas.",
+    ]
+
+    # Propiedad intelectual (texto unificado, igual para todos los esquemas)
+    # {client_entity} se reemplaza con el nombre de la entidad cliente
+    IP_TEXT = (
+        "La arquitectura, los diseños técnicos, comerciales, económicos, financieros y administrativos que "
+        "QUIPUX realice, y en general el Know How asociado, son de su plena y exclusiva propiedad. QUIPUX puede "
+        "utilizarlos libremente, introducir cambios, modificaciones y explotarlos económicamente en cualquier parte "
+        "del mundo. {client_entity} no será propietario de ninguna clase de derechos de autor ni de Propiedad "
+        "Industrial sobre las soluciones de QUIPUX, quien podrá dar la utilización que encuentre conveniente, "
+        "diferente a la que pueda ser autorizada expresamente en el presente documento y los Anexos."
+    )
+
+    # Confidencialidad — {client_entity} se reemplaza con el nombre de la entidad cliente
     CONFIDENTIALITY_TEXT = (
-        "Las partes se obligan a mantener la más estricta confidencialidad sobre toda "
-        "la información que se intercambie con ocasión de la presente propuesta, incluyendo "
-        "pero sin limitarse a información técnica, comercial, financiera y estratégica."
+        "La información no deberá ser divulgada fuera de {client_entity}, ni deberá ser duplicada, usada o "
+        "divulgada para propósito diferente al de la evaluación de la presente propuesta. La información contenida "
+        "en este documento constituye secretos de marca del cliente e información financiera y comercial de QUIPUX "
+        "considerada como confidencial."
     )
+
+    # Principios de prevención de actividades delictivas
+    # {client_entity} se reemplaza con el nombre de la entidad cliente
+    CRIME_PREVENTION_TEXT = (
+        "{client_entity} declara que a la fecha de la presente propuesta no existen antecedentes de sanciones o "
+        "investigaciones por fraude, soborno, corrupción u otras actividades delictivas. Se compromete a que en el "
+        "desarrollo y ejecución del contrato adoptará los procedimientos de detección y prevención de actividades "
+        "irregulares y de corrupción necesarios, y reportará inmediatamente a QUIPUX cualquier sospecha de estos "
+        "actos, prestando toda la colaboración necesaria para garantizar el normal desarrollo del contrato."
+    )
+
+    # Transparencia y ética (referencia breve a la línea ética)
     ETHICS_TEXT = (
-        "Quipux S.A.S. declara que en el desarrollo de sus actividades actúa con transparencia "
-        "y ética empresarial, cumpliendo con todas las normas anticorrupción y de prevención "
-        "de actividades delictivas aplicables."
+        "Para el cumplimiento al Programa de Transparencia y Ética Empresarial de QUIPUX, la línea ética de "
+        "QUIPUX es: lineaetica@quipux.com | www.quipux.com"
     )
 
-    EXCLUDED_SERVICES_LICENSING = [
-        "Desarrollos a la medida o funcionalidades nuevas no contempladas en el alcance.",
-        "Actualización de motores de bases de datos.",
-        "Migración de datos de sistemas legacy.",
-        "Infraestructura tecnológica (servidores, redes, conectividad).",
-        "Capacitación presencial en sitio (se ofrece capacitación virtual).",
-    ]
-    EXCLUDED_SERVICES_SUPPORT = [
-        "Desarrollos a la medida o funcionalidades nuevas.",
-        "Actualización de motores de bases de datos.",
-        "Soporte a componentes de infraestructura no provistos por Quipux.",
-        "Atención a incidentes causados por modificaciones no autorizadas.",
-    ]
+    # Nota de indexación IPC — solo para esquemas services y support_maintenance
+    IPC_INDEXATION_TEXT = (
+        "Los valores se indexarán cada año según el IPC de cierre del año anterior certificado por el DANE. "
+        "Para los servicios en los que exista prestación de personal, el valor también se indexará de acuerdo "
+        "con el incremento del salario mínimo."
+    )
 
-    IP_LICENSING = (
-        "El cliente no será propietario de ninguna clase de derechos de autor ni de propiedad "
-        "industrial sobre las soluciones licenciadas. Se otorga licencia de uso no exclusiva, "
-        "no transferible, para las soluciones descritas en el alcance de la presente propuesta."
-    )
-    IP_SERVICES = (
-        "Las soluciones y componentes provistos bajo este esquema de prestación de servicios "
-        "son propiedad intelectual de Quipux S.A.S. El cliente tendrá derecho de uso durante "
-        "la vigencia del contrato."
-    )
-    # PLACEHOLDER – Reemplazar con texto oficial de Jurídica cuando lo entregue el área legal
-    IP_SUPPORT_MAINTENANCE = (
-        "Las soluciones objeto de soporte y mantenimiento son propiedad intelectual de Quipux S.A.S. "
-        "El cliente tiene derecho a recibir las actualizaciones y parches incluidos en el contrato. "
-        "La prestación del servicio de soporte no transfiere ningún derecho de propiedad intelectual "
-        "sobre el software base al cliente."
-    )
-    # PLACEHOLDER – Reemplazar con texto oficial de Jurídica cuando lo entregue el área legal
-    IP_SAAS = (
-        "El software es provisto bajo la modalidad de Software como Servicio (SaaS) hospedado en la "
-        "infraestructura de Quipux S.A.S. El cliente accede al uso de la plataforma a través de internet "
-        "sin necesidad de instalación local. Quipux retiene todos los derechos de propiedad intelectual "
-        "sobre la plataforma, bases de datos y herramientas relacionadas."
+    # Plazo por defecto cuando no se provee texto personalizado
+    DEFAULT_VALIDITY_TEXT = (
+        "La vigencia del contrato será desde la fecha de suscripción hasta la terminación del mismo, "
+        "conforme a lo acordado entre las partes."
     )
 
     def _add_page_number(self, paragraph):
         """Añade numeración de página al párrafo."""
         paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        
-        # Inicia el campo
+
         run = paragraph.add_run()
         fldChar = OxmlElement('w:fldChar')
         fldChar.set(qn('w:fldCharType'), 'begin')
         run._r.append(fldChar)
 
-        # Añade el comando PAGE
         run = paragraph.add_run()
         instrText = OxmlElement('w:instrText')
         instrText.set(qn('xml:space'), 'preserve')
         instrText.text = "PAGE"
         run._r.append(instrText)
 
-        # Cierra el campo
         run = paragraph.add_run()
         fldChar = OxmlElement('w:fldChar')
         fldChar.set(qn('w:fldCharType'), 'end')
@@ -105,54 +129,80 @@ class DocumentGenerator:
         }
         return mapping.get(scheme_type.lower(), "por definir")
 
-    def _add_economic_conditions_table(self, doc, payment_type: str):
+    @classmethod
+    def get_value_column_label(cls, scheme_type: str) -> str:
+        """Devuelve el encabezado de la columna de valor según el esquema."""
+        mapping = {
+            "licensing": "Valor (IVA incluido)",
+            "services": "Valor mensual (IVA incluido)",
+            "support_maintenance": "Valor anual (IVA incluido)",
+        }
+        return mapping.get(scheme_type.lower(), "Valor")
+
+    def _add_economic_conditions_table(
+        self,
+        doc: Document,
+        scheme_type: str,
+        products: List[PortfolioProduct],
+    ) -> None:
         """
         Agrega una tabla de condiciones económicas con el formato estándar de Quipux.
+        Genera una fila por producto/componente real más las filas de totales.
+        Agrega nota de indexación IPC para esquemas de servicios y mantenimiento.
         """
+        value_label = self.get_value_column_label(scheme_type)
+
         table = doc.add_table(rows=1, cols=2)
         table.style = 'Table Grid'
-        
-        # Encabezado
+
+        # Encabezado (Azul Quipux #1a365d, texto blanco)
         hdr_cells = table.rows[0].cells
-        hdr_cells[0].text = 'Concepto'
-        hdr_cells[1].text = 'Valor'
-        
-        # Aplicar estilo al encabezado (Azul Quipux #1a365d, texto blanco)
+        hdr_cells[0].text = 'Componente'
+        hdr_cells[1].text = value_label
+
         for cell in hdr_cells:
             tc = cell._tc
             tcPr = tc.get_or_add_tcPr()
             shd = OxmlElement('w:shd')
             shd.set(qn('w:fill'), '1A365D')
             tcPr.append(shd)
-            
+
             p = cell.paragraphs[0]
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run = p.runs[0]
             run.font.bold = True
             run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
 
-        # 3 filas vacías con placeholders
-        for _ in range(3):
-            row_cells = table.add_row().cells
-            row_cells[0].text = '[Concepto]'
-            row_cells[1].text = '$0'
+        # Filas dinámicas: una por producto (o 3 placeholders si no hay productos)
+        if products:
+            for product in products:
+                row_cells = table.add_row().cells
+                row_cells[0].text = product.name
+                row_cells[1].text = '[Por definir]'
+        else:
+            for _ in range(3):
+                row_cells = table.add_row().cells
+                row_cells[0].text = '[Componente]'
+                row_cells[1].text = '[Por definir]'
 
-        # Totales
+        # Filas de totales
         totals = [
-            ("Subtotal", "$0"),
-            ("IVA (19%)", "$0"),
-            ("Total", "$0")
+            ("Subtotal", "[Por definir]"),
+            ("IVA (19%)", "[Por definir]"),
+            ("Total", "[Por definir]"),
         ]
-        
         for label, val in totals:
             row_cells = table.add_row().cells
             row_cells[0].text = label
             row_cells[1].text = val
             row_cells[0].paragraphs[0].runs[0].font.bold = True
 
-        # Párrafo de forma de pago
-        p = doc.add_paragraph()
-        p.add_run(f"\nForma de Pago: {payment_type}")
+        # Nota de indexación IPC para servicios y mantenimiento
+        if scheme_type.lower() in ("services", "support_maintenance"):
+            p_ipc = doc.add_paragraph()
+            run_ipc = p_ipc.add_run(self.IPC_INDEXATION_TEXT)
+            run_ipc.italic = True
+            run_ipc.font.size = Pt(9)
 
     def generate_proposal_docx(
         self,
@@ -166,6 +216,7 @@ class DocumentGenerator:
         context_text: str,
         scope_text: str,
         letter_text: str,
+        validity_period: Optional[str] = None,
         economic_conditions: Optional[str] = None,
         payment_terms: Optional[str] = None,
         payment_frequency: Optional[str] = None,
@@ -186,7 +237,6 @@ class DocumentGenerator:
         section.right_margin = Cm(2.5)
 
         # --- Configurar estilos ---
-        # Normal: Calibri 11pt, Justificado, Interlineado 1.15
         style = doc.styles["Normal"]
         font = style.font
         font.name = "Calibri"
@@ -195,7 +245,6 @@ class DocumentGenerator:
         style.paragraph_format.line_spacing = 1.15
         style.paragraph_format.space_after = Pt(10)
 
-        # Heading 1: Azul Quipux #1a365d, 16pt
         h1 = doc.styles["Heading 1"]
         h1.font.name = "Calibri"
         h1.font.size = Pt(16)
@@ -204,7 +253,6 @@ class DocumentGenerator:
         h1.paragraph_format.space_before = Pt(18)
         h1.paragraph_format.space_after = Pt(12)
 
-        # Heading 2: Gris Quipux #2d3748, 13pt
         h2 = doc.styles["Heading 2"]
         h2.font.name = "Calibri"
         h2.font.size = Pt(13)
@@ -215,16 +263,15 @@ class DocumentGenerator:
 
         # --- PORTADA ---
         doc.add_paragraph("\n\n\n")
-        
-        # Logo placeholder
+
         p_logo = doc.add_paragraph()
         p_logo.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run_logo = p_logo.add_run("[LOGO QUIPUX]")
         run_logo.bold = True
         run_logo.font.size = Pt(12)
-        
+
         doc.add_paragraph("\n\n")
-        
+
         p = doc.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run = p.add_run("PROPUESTA COMERCIAL")
@@ -244,7 +291,7 @@ class DocumentGenerator:
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run = p.add_run(f"Presentada a:\n{client_entity}")
         run.font.size = Pt(14)
-        
+
         p = doc.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run = p.add_run(f"\n{client_name}\n{client_position}")
@@ -259,11 +306,14 @@ class DocumentGenerator:
         run.bold = True
         run.font.size = Pt(14)
         doc.add_paragraph("\n[El índice se genera automáticamente al actualizar campos en Word]")
-        
+
         doc.add_page_break()
 
         # --- CARTA DE PRESENTACIÓN ---
-        doc.add_paragraph(f"{client_city}, [FECHA]")
+        today = date.today()
+        fecha_str = f"{today.day} de {_MONTHS_ES[today.month]} de {today.year}"
+
+        doc.add_paragraph(f"{client_city}, {fecha_str}")
         doc.add_paragraph("")
         p = doc.add_paragraph("Señor(a)")
         p.paragraph_format.space_after = Pt(0)
@@ -272,7 +322,7 @@ class DocumentGenerator:
         p = doc.add_paragraph(f"{client_position}")
         p.paragraph_format.space_after = Pt(0)
         p = doc.add_paragraph(f"{client_entity}")
-        
+
         doc.add_paragraph("")
         p = doc.add_paragraph()
         run = p.add_run(f"Asunto: {title}")
@@ -299,88 +349,87 @@ class DocumentGenerator:
 
         doc.add_page_break()
 
-        # --- CUERPO DEL DOCUMENTO ---
-        # CONTEXTO
+        # ------------------------------------------------------------------ #
+        # CUERPO DEL DOCUMENTO                                                 #
+        # ------------------------------------------------------------------ #
+
+        # 1. CONTEXTO
         doc.add_heading("1. CONTEXTO", level=1)
         doc.add_paragraph(context_text or "")
 
-        # ALCANCE
-        doc.add_heading("2. ALCANCE", level=1)
+        # 2. ALCANCE GENERAL DE LA PROPUESTA
+        doc.add_heading("2. ALCANCE GENERAL DE LA PROPUESTA", level=1)
         doc.add_paragraph(scope_text or "")
 
         if products:
             doc.add_paragraph(
                 "El alcance incluye las siguientes soluciones y/o componentes:"
             )
+            # Agrupar por categoría si los productos tienen ese campo
+            categories: dict = {}
             for product in products:
-                doc.add_paragraph(product.name, style="List Bullet")
+                cat = (product.category or "").strip()
+                categories.setdefault(cat, []).append(product)
+
+            if len(categories) == 1 and "" in categories:
+                # Sin categorías — lista plana
+                for product in products:
+                    doc.add_paragraph(product.name, style="List Bullet")
+            else:
+                # Con categorías — subsecciones
+                for cat, cat_products in categories.items():
+                    if cat:
+                        h2_cat = doc.add_heading(cat, level=2)
+                    for product in cat_products:
+                        doc.add_paragraph(product.name, style="List Bullet")
 
         doc.add_paragraph(
             "Nota: Invitamos a leer los anexos técnicos para identificar y comprender "
             "el alcance de cada uno de los componentes relacionados en la propuesta comercial."
         )
 
-        # CONDICIONES ECONÓMICAS
-        doc.add_heading("3. CONDICIONES ECONÓMICAS", level=1)
+        # 3. PLAZO
+        doc.add_heading("3. PLAZO", level=1)
+        doc.add_paragraph(validity_period or self.DEFAULT_VALIDITY_TEXT)
+
+        # 4. CONDICIONES ECONÓMICAS
+        doc.add_heading("4. CONDICIONES ECONÓMICAS", level=1)
         if economic_conditions:
             doc.add_paragraph(economic_conditions)
         else:
-            p_type = self.get_payment_type_from_scheme(scheme_types[0] if scheme_types else "")
-            self._add_economic_conditions_table(doc, p_type)
+            primary_scheme = scheme_types[0] if scheme_types else "licensing"
+            self._add_economic_conditions_table(doc, primary_scheme, products)
 
         if payment_terms:
-            doc.add_heading("Forma de Pago", level=2)
+            doc.add_heading("Facturación y forma de pago", level=2)
             doc.add_paragraph(payment_terms)
 
-        # SERVICIOS EXCLUIDOS
-        doc.add_heading("4. SERVICIOS EXCLUIDOS", level=1)
-        is_licensing = any("licensing" in s.lower() for s in scheme_types)
-        excluded = (
-            self.EXCLUDED_SERVICES_LICENSING if is_licensing
-            else self.EXCLUDED_SERVICES_SUPPORT
-        )
+        # 5. SERVICIOS EXCLUIDOS
+        doc.add_heading("5. SERVICIOS EXCLUIDOS", level=1)
         doc.add_paragraph("La presente propuesta no incluye los siguientes servicios:")
-        for item in excluded:
+        for item in self.EXCLUDED_SERVICES:
             doc.add_paragraph(item, style="List Bullet")
 
-        # PROPIEDAD INTELECTUAL Y LEGAL
-        doc.add_heading("5. ESQUEMA DE LICENCIAMIENTO Y PRESTACIÓN DE SERVICIO", level=1)
-        
-        doc.add_heading("5.1. Propiedad Intelectual", level=2)
-        
-        added_ips = set()
-        for scheme in scheme_types:
-            scheme_lower = scheme.lower()
-            if "licensing" in scheme_lower and "IP_LICENSING" not in added_ips:
-                if len(scheme_types) > 1:
-                    p = doc.add_paragraph()
-                    p.add_run("Licenciamiento:").bold = True
-                doc.add_paragraph(self.IP_LICENSING)
-                added_ips.add("IP_LICENSING")
-            
-            elif "support_maintenance" in scheme_lower and "IP_SUPPORT" not in added_ips:
-                if len(scheme_types) > 1:
-                    p = doc.add_paragraph()
-                    p.add_run("Soporte y Mantenimiento:").bold = True
-                doc.add_paragraph(self.IP_SUPPORT_MAINTENANCE)
-                added_ips.add("IP_SUPPORT")
-            
-            elif "services" in scheme_lower and "IP_SERVICES" not in added_ips:
-                if len(scheme_types) > 1:
-                    p = doc.add_paragraph()
-                    p.add_run("Prestación de Servicios:").bold = True
-                
-                # Decidir si es SaaS o Servicios estándar
-                if payment_frequency == "mensual":
-                    doc.add_paragraph(self.IP_SAAS)
-                else:
-                    doc.add_paragraph(self.IP_SERVICES)
-                added_ips.add("IP_SERVICES")
+        # 6. ESQUEMA DE PRESTACIÓN DE SERVICIOS Y LICENCIAMIENTO
+        doc.add_heading("6. ESQUEMA DE PRESTACIÓN DE SERVICIOS Y LICENCIAMIENTO", level=1)
 
-        doc.add_heading("5.2. Confidencialidad", level=2)
-        doc.add_paragraph(self.CONFIDENTIALITY_TEXT)
+        # 6.1 Propiedad Intelectual (texto unificado con nombre del cliente)
+        doc.add_heading("6.1. Propiedad Intelectual", level=2)
+        doc.add_paragraph(self.IP_TEXT.format(client_entity=client_entity))
 
-        doc.add_heading("5.3. Transparencia y Ética Empresarial", level=2)
+        # 6.2 Confidencialidad
+        doc.add_heading("6.2. Confidencialidad", level=2)
+        doc.add_paragraph(self.CONFIDENTIALITY_TEXT.format(client_entity=client_entity))
+
+        # 6.3 Principios de Prevención de Actividades Delictivas
+        doc.add_heading("6.3. Principios de Prevención de Actividades Delictivas", level=2)
+        doc.add_paragraph(self.CRIME_PREVENTION_TEXT.format(client_entity=client_entity))
+
+        # 6.4 Cumplimiento al Programa de Transparencia y Ética Empresarial de Quipux
+        doc.add_heading(
+            "6.4. Cumplimiento al Programa de Transparencia y Ética Empresarial de Quipux",
+            level=2,
+        )
         doc.add_paragraph(self.ETHICS_TEXT)
 
         # --- PIE DE PÁGINA (Numeración) ---
@@ -453,7 +502,6 @@ class DocumentGenerator:
         try:
             if platform.system() == "Windows":
                 from docx2pdf import convert
-                # docx2pdf puede fallar si no hay Word instalado, pero es lo estándar en Windows
                 convert(docx_path, pdf_path)
             else:
                 import subprocess
@@ -478,17 +526,15 @@ class DocumentGenerator:
                         f"LibreOffice error: {result.stderr}"
                     )
 
-                # LibreOffice genera el PDF con el mismo nombre pero extensión .pdf
                 generated_pdf = docx_file.with_suffix(".pdf")
 
-                # Si el nombre del PDF es diferente, renombrarlo
                 import shutil
                 if generated_pdf.exists() and str(generated_pdf) != str(pdf_path):
                     shutil.move(str(generated_pdf), str(pdf_path))
 
             if not Path(pdf_path).exists():
                 raise DocumentGeneratorError(
-                    f"El PDF no fue generado correctamente"
+                    "El PDF no fue generado correctamente"
                 )
 
             return str(pdf_path)

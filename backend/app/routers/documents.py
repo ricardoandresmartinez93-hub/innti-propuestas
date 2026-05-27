@@ -48,6 +48,11 @@ def _build_proposal_docx(
     product_names = [p.product_name for p in proposal.products]
     portfolio_products = portfolio.get_by_names(product_names)
 
+    # Propagar la categoría de ProposalProduct a PortfolioProduct para agrupar en el documento
+    category_map = {p.product_name.lower(): p.category or "" for p in proposal.products}
+    for pp in portfolio_products:
+        pp.category = category_map.get(pp.name.lower(), "")
+
     # Generar texto con Innti o usar valores por defecto
     context_text = proposal.context_content or ""
     scope_text = proposal.scope_content or ""
@@ -91,6 +96,7 @@ def _build_proposal_docx(
         context_text=context_text,
         scope_text=scope_text,
         letter_text=letter_text,
+        validity_period=proposal.validity_period,
         economic_conditions=proposal.economic_conditions,
         payment_terms=proposal.payment_terms,
     )

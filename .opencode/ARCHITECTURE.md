@@ -97,7 +97,7 @@ Estas son las cosas que son fáciles de equivocar si no se leyó el código real
 5. **Los documentos se guardan en `/tmp/innti_docs/`** (FileResponse), no se sirven desde memoria (StreamingResponse).
 6. **No hay Alembic** — el esquema de BD se recrea con `Base.metadata.create_all` al iniciar.
 7. **`action` es campo requerido** en los bodies de `/approve` y `/reject`: `"action": "approved"` o `"action": "rejected"`. No tiene valor por defecto en el schema Pydantic.
-8. **ProposalEditor tiene 7 pestañas**: 4 editables siempre (contexto, alcance, condiciones, pago), 2 auto-completadas (servicios excluidos, propiedad intelectual), 1 solo lectura (carta de presentación). El botón Guardar funciona desde cualquier pestaña.
+8. **ProposalEditor tiene 8 pestañas**: 5 editables siempre (contexto, alcance, plazo, condiciones económicas, forma de pago), 2 auto-completadas con texto fijo editable (servicios excluidos, propiedad intelectual), 1 solo lectura (carta de presentación). El botón Guardar funciona desde cualquier pestaña.
 9. **`key={proposal.updated_at}` en ProposalEditor**: fuerza re-mount del componente TipTap cuando Innti regenera el contenido, evitando contenido obsoleto en el editor sin recargar la página.
 
 ---
@@ -122,7 +122,7 @@ Estas son las cosas que son fáciles de equivocar si no se leyó el código real
 | Flujo de aprobación (7 estados) | ✅ | ✅ | ✅ |
 | `submit-review` multi-transición | ✅ | ✅ | ✅ |
 | Cómo crear propuesta | — | ✅ | ✅ |
-| Editor TipTap (7 tabs, readOnly) | — | ✅ | — |
+| Editor TipTap (8 tabs, readOnly) | — | ✅ | — |
 | Testing | — | ✅ | ✅ |
 | Generación de documentos | — | ✅ | ✅ |
 | Validación pre-commit | — | — | ✅ |
@@ -146,6 +146,21 @@ Estas son las cosas que son fáciles de equivocar si no se leyó el código real
 1. Actualizar `AGENTS.md` (fuente de verdad)
 2. Actualizar skills afectados
 3. Actualizar agents si cambia el flujo
+
+### ✅ Checklist de documentación — obligatorio tras cada cambio de código
+
+Después de crear o modificar **cualquier archivo**, verificar cuáles de estos documentos deben actualizarse:
+
+| Archivo | Actualizar cuando… |
+|---------|-------------------|
+| `AGENTS.md` | Cambia stack, reglas de desarrollo, convenciones o flujos técnicos |
+| `.claude/agents/*.md` y `.opencode/agents/*.md` | Cambia el comportamiento, prompts o herramientas de un agente |
+| `.opencode/skills/document-generation/SKILL.md` | Cambia `DocumentGenerator`: secciones del doc, constantes, endpoints o flujo de generación |
+| `.opencode/skills/innti-domain/SKILL.md` | Cambia esquemas, estados, roles, o métodos de `InntiService` |
+| `.opencode/skills/proposal-workflow-guide/SKILL.md` | Cambia la UI: pestañas del editor, pasos del flujo, botones o campos visibles al usuario |
+| `.opencode/skills/testing-workflow/SKILL.md` | Cambia cómo se ejecutan o estructuran los tests |
+| `.opencode/ARCHITECTURE.md` | Cambia la arquitectura global, reglas no-obvias (#1–#9) o la matriz de cobertura |
+| `CLAUDE.md` | Se agregan nuevos agents, skills o comandos rápidos |
 
 ---
 

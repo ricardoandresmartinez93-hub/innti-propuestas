@@ -96,6 +96,7 @@ export interface Proposal {
   letter_content?: string
   context_content?: string
   scope_content?: string
+  validity_period?: string
   economic_conditions?: string
   payment_terms?: string
   excluded_services?: string

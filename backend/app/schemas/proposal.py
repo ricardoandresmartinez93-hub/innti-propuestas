@@ -63,6 +63,7 @@ class ProposalUpdate(BaseModel):
     letter_content: Optional[str] = None
     context_content: Optional[str] = None
     scope_content: Optional[str] = None
+    validity_period: Optional[str] = None
     economic_conditions: Optional[str] = None
     payment_terms: Optional[str] = None
     excluded_services: Optional[str] = None
@@ -82,6 +83,7 @@ class ProposalRead(BaseModel):
     letter_content: Optional[str] = None
     context_content: Optional[str] = None
     scope_content: Optional[str] = None
+    validity_period: Optional[str] = None
     economic_conditions: Optional[str] = None
     payment_terms: Optional[str] = None
     excluded_services: Optional[str] = None

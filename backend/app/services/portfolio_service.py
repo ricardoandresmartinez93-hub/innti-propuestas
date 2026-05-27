@@ -21,6 +21,8 @@ class PortfolioProduct:
     monetization_model: str
     pricing_model: str
     country: str
+    # Categoría opcional proveniente de la propuesta (ej: "nuevo", "modernización")
+    category: str = ""
 
 
 class PortfolioNotFoundError(Exception):

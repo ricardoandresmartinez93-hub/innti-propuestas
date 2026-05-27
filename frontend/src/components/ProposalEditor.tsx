@@ -15,6 +15,7 @@ interface ProposalEditorProps {
 const SECTIONS = [
   { id: 'context_content', label: 'Contexto', readOnly: false },
   { id: 'scope_content', label: 'Alcance', readOnly: false },
+  { id: 'validity_period', label: 'Plazo', readOnly: false },
   { id: 'economic_conditions', label: 'Condiciones Económicas', readOnly: false },
   { id: 'payment_terms', label: 'Forma de Pago', readOnly: false },
   { id: 'excluded_services', label: 'Servicios Excluidos', readOnly: false },
