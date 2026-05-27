@@ -5,9 +5,11 @@ Cubre:
   - _strip_html: limpieza de contenido HTML de TipTap
   - _has_content: detección de contenido real en HTML (Tarea 2)
   - generate_proposal_docx: lógica de fallback en secciones 5 y 6.1
+  - _add_table_of_contents: campo TOC real con OOXML field codes
   - _build_proposal_docx (router): integración con campos de BD
 """
 import io
+import zipfile
 import pytest
 from unittest.mock import MagicMock, patch
 
@@ -62,6 +64,19 @@ def _build_minimal_docx(
         excluded_services=excluded_services,
         ip_section=ip_section,
     )
+
+
+# ---------------------------------------------------------------------------
+# Helper compartido: extrae el XML de word/document.xml del .docx generado
+# ---------------------------------------------------------------------------
+
+def _get_doc_xml(doc) -> str:
+    """Serializa el Document a bytes y devuelve el XML interno de word/document.xml."""
+    buf = io.BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+    with zipfile.ZipFile(buf) as z:
+        return z.read("word/document.xml").decode("utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -155,6 +170,54 @@ class TestHasContent:
 
     def test_strong_with_text_returns_true(self):
         assert _has_content("<strong>Negrita</strong>")
+
+
+# ---------------------------------------------------------------------------
+# Tests de _add_table_of_contents — campo TOC real con OOXML field codes
+# ---------------------------------------------------------------------------
+
+class TestTableOfContents:
+    """Verifica que el documento contenga un campo TOC real, no texto placeholder."""
+
+    def test_toc_field_code_is_present(self):
+        """El XML del documento debe contener la instrucción del campo TOC."""
+        doc = _build_minimal_docx()
+        xml = _get_doc_xml(doc)
+        assert "TOC" in xml, "No se encontró el campo TOC en el documento generado"
+
+    def test_toc_has_dirty_true_for_auto_update(self):
+        """El campo TOC debe llevar w:dirty='true' para que Word lo actualice al abrir."""
+        doc = _build_minimal_docx()
+        xml = _get_doc_xml(doc)
+        # lxml puede serializar el atributo con comillas simples o dobles
+        assert 'dirty="true"' in xml or "dirty='true'" in xml, (
+            "El campo TOC no tiene el atributo w:dirty='true'"
+        )
+
+    def test_toc_includes_headings_1_to_3(self):
+        """El campo TOC debe capturar los niveles Heading 1, 2 y 3."""
+        doc = _build_minimal_docx()
+        xml = _get_doc_xml(doc)
+        assert "1-3" in xml, "El campo TOC no incluye la especificación de niveles 1-3"
+
+    def test_toc_has_hyperlink_switch(self):
+        """El campo TOC debe incluir el switch \\h para generar hipervínculos internos."""
+        doc = _build_minimal_docx()
+        xml = _get_doc_xml(doc)
+        # La instrucción almacenada en instrText contiene los switches sin escape
+        assert r"\h" in xml, "El campo TOC no incluye el switch \\h (hipervínculos)"
+
+    def test_no_placeholder_text(self):
+        """El texto estático de marcador de posición no debe aparecer en el documento."""
+        doc = _build_minimal_docx()
+        text = _extract_text(doc)
+        assert "[El índice se genera automáticamente al actualizar campos en Word]" not in text
+
+    def test_toc_title_is_present(self):
+        """El encabezado 'TABLA DE CONTENIDO' debe seguir presente en el documento."""
+        doc = _build_minimal_docx()
+        text = _extract_text(doc)
+        assert "TABLA DE CONTENIDO" in text
 
 
 # ---------------------------------------------------------------------------

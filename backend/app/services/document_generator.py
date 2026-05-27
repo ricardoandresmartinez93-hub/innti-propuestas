@@ -177,6 +177,50 @@ class DocumentGenerator:
         "conforme a lo acordado entre las partes."
     )
 
+    def _add_table_of_contents(self, doc: Document) -> None:
+        """
+        Inserta un campo TOC real usando OOXML field codes.
+
+        El atributo ``w:dirty="true"`` le indica a Word que regenere el índice
+        automáticamente al abrir el documento.  Sin necesidad de intervención
+        manual: Word detecta que el campo está desactualizado y lo reconstruye.
+
+        Instrucción usada: ``TOC \\o "1-3" \\h \\z \\u``
+          - ``\\o "1-3"`` → captura Heading 1, 2 y 3
+          - ``\\h``        → crea hipervínculos internos en cada entrada
+          - ``\\z``        → oculta numeración en vista web
+          - ``\\u``        → usa el nivel de esquema del párrafo
+        """
+        paragraph = doc.add_paragraph()
+        paragraph.style = doc.styles["Normal"]
+        paragraph.paragraph_format.space_after = Pt(0)
+
+        # Run 1 — BEGIN del campo, marcado como sucio (dirty) para forzar actualización
+        r = paragraph.add_run()
+        fldChar = OxmlElement('w:fldChar')
+        fldChar.set(qn('w:fldCharType'), 'begin')
+        fldChar.set(qn('w:dirty'), 'true')
+        r._r.append(fldChar)
+
+        # Run 2 — instrucción del campo TOC
+        r = paragraph.add_run()
+        instrText = OxmlElement('w:instrText')
+        instrText.set(qn('xml:space'), 'preserve')
+        instrText.text = ' TOC \\o "1-3" \\h \\z \\u '
+        r._r.append(instrText)
+
+        # Run 3 — SEPARATE (divide la instrucción del contenido calculado)
+        r = paragraph.add_run()
+        fldChar = OxmlElement('w:fldChar')
+        fldChar.set(qn('w:fldCharType'), 'separate')
+        r._r.append(fldChar)
+
+        # Run 4 — END del campo
+        r = paragraph.add_run()
+        fldChar = OxmlElement('w:fldChar')
+        fldChar.set(qn('w:fldCharType'), 'end')
+        r._r.append(fldChar)
+
     def _add_page_number(self, paragraph):
         """Añade numeración de página al párrafo."""
         paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -385,7 +429,9 @@ class DocumentGenerator:
         run = p.add_run("TABLA DE CONTENIDO")
         run.bold = True
         run.font.size = Pt(14)
-        doc.add_paragraph("\n[El índice se genera automáticamente al actualizar campos en Word]")
+        run.font.color.rgb = RGBColor(0x1A, 0x36, 0x5D)
+        doc.add_paragraph("")
+        self._add_table_of_contents(doc)
 
         doc.add_page_break()
 
