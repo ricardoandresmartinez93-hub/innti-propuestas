@@ -88,11 +88,13 @@ const ProposalDetailPage: React.FC = () => {
         response = await proposalApi.generateDocument(proposal.id, false)
       }
 
-      const mimeType =
-        type === 'pdf'
-          ? 'application/pdf'
-          : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-      const extension = type === 'pdf' ? 'pdf' : 'docx'
+      // Usar el Content-Type real de la respuesta para detectar si el backend
+      // devolvió un ZIP (documentos separados) en lugar de un archivo único.
+      const contentType: string =
+        response.headers['content-type'] ?? 'application/octet-stream'
+      const isZip = contentType.includes('zip')
+      const mimeType = contentType.split(';')[0].trim()
+      const extension = isZip ? 'zip' : type === 'pdf' ? 'pdf' : 'docx'
       const filename = `propuesta_${proposal.id}_${type}.${extension}`
 
       const blob = new Blob([response.data], { type: mimeType })

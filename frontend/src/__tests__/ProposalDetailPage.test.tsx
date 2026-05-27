@@ -1,8 +1,12 @@
 /**
  * @vitest-environment jsdom
  */
-import { vi, describe, it, expect, beforeEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react'
+
+// Limpiar el DOM después de cada test — necesario porque @testing-library/react
+// no llama a cleanup automáticamente sin Vitest globals configurados.
+afterEach(cleanup)
 import '@testing-library/jest-dom/vitest'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import ProposalDetailPage from '../pages/ProposalDetailPage'
@@ -18,6 +22,9 @@ vi.mock('../services/api', () => ({
     reject: vi.fn(),
     submitForReview: vi.fn(),
     markSentToClient: vi.fn(),
+    generateDocument: vi.fn(),
+    generatePdf: vi.fn(),
+    generateAnnex: vi.fn(),
   },
 }))
 
@@ -142,5 +149,63 @@ describe('ProposalDetailPage Approval Flow', () => {
       expect(screen.getByText('Revisora (Ángela)')).toBeInTheDocument()
       expect(screen.getByText(/"Looks good"/i)).toBeInTheDocument()
     })
+  })
+})
+
+describe('ProposalDetailPage — descarga de documentos', () => {
+  let createObjectURL: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(proposalApi.getApprovals).mockResolvedValue({ data: [] } as any)
+
+    createObjectURL = vi.fn(() => 'blob:mock')
+    Object.defineProperty(window, 'URL', {
+      writable: true,
+      value: { createObjectURL, revokeObjectURL: vi.fn() },
+    })
+  })
+
+  afterEach(() => {
+    cleanup()
+  })
+
+  it('crea un Blob application/zip cuando el backend responde con ese content-type', async () => {
+    vi.mocked(proposalApi.get).mockResolvedValue({
+      data: { ...mockProposal, status: 'draft' },
+    } as any)
+    vi.mocked(proposalApi.generateDocument).mockResolvedValue({
+      data: new Blob(['PK']),
+      headers: { 'content-type': 'application/zip' },
+    } as any)
+
+    renderWithRouter()
+    await waitFor(() => expect(screen.getByText('Generar Word')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Generar Word'))
+
+    await waitFor(() => expect(createObjectURL).toHaveBeenCalled())
+    const blob: Blob = createObjectURL.mock.calls[0][0]
+    expect(blob.type).toBe('application/zip')
+  })
+
+  it('crea un Blob wordprocessingml cuando el backend responde con ese content-type', async () => {
+    vi.mocked(proposalApi.get).mockResolvedValue({
+      data: { ...mockProposal, status: 'draft' },
+    } as any)
+    vi.mocked(proposalApi.generateDocument).mockResolvedValue({
+      data: new Blob(['PK']),
+      headers: {
+        'content-type':
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      },
+    } as any)
+
+    renderWithRouter()
+    await waitFor(() => expect(screen.getByText('Generar Word')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Generar Word'))
+
+    await waitFor(() => expect(createObjectURL).toHaveBeenCalled())
+    const blob: Blob = createObjectURL.mock.calls[0][0]
+    expect(blob.type).toContain('wordprocessingml')
   })
 })

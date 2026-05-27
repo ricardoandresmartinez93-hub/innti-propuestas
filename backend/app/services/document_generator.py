@@ -661,8 +661,18 @@ class DocumentGenerator:
 
         try:
             if platform.system() == "Windows":
+                # docx2pdf usa win32com (COM de Windows) para automatizar Word.
+                # FastAPI / Uvicorn ejecuta los endpoints síncronos en hilos del pool;
+                # esos hilos no tienen COM inicializado, de ahí el error
+                # "CoInitialize has not been called" (-2147221008).
+                # Solución: inicializar y liberar COM explícitamente en este hilo.
+                import pythoncom
                 from docx2pdf import convert
-                convert(docx_path, pdf_path)
+                pythoncom.CoInitialize()
+                try:
+                    convert(docx_path, pdf_path)
+                finally:
+                    pythoncom.CoUninitialize()
             else:
                 import subprocess
                 pdf_dir = Path(pdf_path).parent

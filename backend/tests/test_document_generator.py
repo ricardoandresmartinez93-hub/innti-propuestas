@@ -11,6 +11,7 @@ Cubre:
 import io
 import zipfile
 import pytest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from app.services.document_generator import DocumentGenerator, _strip_html, _has_content
@@ -496,3 +497,54 @@ class TestDocumentsRouterIntegration:
                 # Con "" el generador OMITE las secciones (Tarea 2: pestañas vacías no aparecen).
                 assert call_kwargs["excluded_services"] == ""
                 assert call_kwargs["ip_section"] == ""
+
+
+# ---------------------------------------------------------------------------
+# Tests: convert_docx_to_pdf — inicialización COM en Windows
+# ---------------------------------------------------------------------------
+
+class TestConvertDocxToPdfWindowsCOM:
+    """
+    Verifica que convert_docx_to_pdf inicializa y libera COM correctamente en
+    Windows para evitar el error 'CoInitialize has not been called'
+    (-2147221008) que ocurre cuando FastAPI/Uvicorn ejecuta el endpoint en
+    un hilo del pool que no tiene COM inicializado.
+    """
+
+    def test_com_initialize_called_on_windows(self, tmp_path):
+        """CoInitialize y CoUninitialize deben llamarse en el path de Windows."""
+        docx_file = tmp_path / "test.docx"
+        docx_file.write_bytes(b"PK")  # contenido mínimo — docx2pdf se mockea
+        pdf_path = str(tmp_path / "test.pdf")
+
+        mock_pythoncom = MagicMock()
+
+        # El mock crea el archivo PDF para pasar la validación de existencia
+        def fake_convert(src, dst):
+            Path(dst).write_bytes(b"%PDF-1.4")
+
+        with patch("platform.system", return_value="Windows"), \
+             patch.dict("sys.modules", {"pythoncom": mock_pythoncom}), \
+             patch("docx2pdf.convert", side_effect=fake_convert):
+            gen = DocumentGenerator()
+            gen.convert_docx_to_pdf(str(docx_file), pdf_path)
+
+        mock_pythoncom.CoInitialize.assert_called_once()
+        mock_pythoncom.CoUninitialize.assert_called_once()
+
+    def test_com_uninitialize_called_even_if_convert_raises(self, tmp_path):
+        """CoUninitialize debe llamarse aunque docx2pdf.convert lance excepción."""
+        docx_file = tmp_path / "test.docx"
+        docx_file.write_bytes(b"PK")
+
+        mock_pythoncom = MagicMock()
+
+        with patch("platform.system", return_value="Windows"), \
+             patch.dict("sys.modules", {"pythoncom": mock_pythoncom}), \
+             patch("docx2pdf.convert", side_effect=RuntimeError("Word no disponible")):
+            gen = DocumentGenerator()
+            with pytest.raises(Exception):
+                gen.convert_docx_to_pdf(str(docx_file), str(tmp_path / "out.pdf"))
+
+        mock_pythoncom.CoInitialize.assert_called_once()
+        mock_pythoncom.CoUninitialize.assert_called_once()
