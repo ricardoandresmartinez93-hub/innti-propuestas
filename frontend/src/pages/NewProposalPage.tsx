@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { portfolioApi, proposalApi } from '../services/api'
+import { portfolioApi, proposalApi, clientApi } from '../services/api'
 import { SCHEME_LABELS } from '../types'
 import type { PortfolioProduct, ProposalScheme, Client, ProposalCreate } from '../types'
 import SchemeSelector from '../components/SchemeSelector'
@@ -22,6 +22,21 @@ export default function NewProposalPage() {
   
   const [client, setClient] = useState<Client | null>(null)
   const [proposalTitle, setProposalTitle] = useState('')
+
+  const [clientMode, setClientMode] = useState<'select' | 'create'>('select')
+  const [existingClients, setExistingClients] = useState<Client[]>([])
+  const [clientSearch, setClientSearch] = useState('')
+  const [loadingClients, setLoadingClients] = useState(false)
+
+  useEffect(() => {
+    if (currentStep === 3) {
+      setLoadingClients(true)
+      clientApi.list(0, 100)
+        .then(res => setExistingClients(res.data))
+        .catch(console.error)
+        .finally(() => setLoadingClients(false))
+    }
+  }, [currentStep])
 
   useEffect(() => {
     portfolioApi.listProducts()
@@ -67,6 +82,11 @@ export default function NewProposalPage() {
 
   const filteredProducts = products.filter((p) =>
     p.name.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
+  const filteredClients = existingClients.filter(c =>
+    c.name.toLowerCase().includes(clientSearch.toLowerCase()) ||
+    c.entity.toLowerCase().includes(clientSearch.toLowerCase())
   )
 
   const steps = [
@@ -218,9 +238,86 @@ export default function NewProposalPage() {
                   </button>
                 </div>
               ) : (
-                <ClientForm onClientCreated={(newClient) => {
-                  setClient(newClient)
-                }} />
+                <div className="space-y-6">
+                  <div className="flex border-b border-gray-200">
+                    <button
+                      onClick={() => setClientMode('select')}
+                      className={`py-2 px-4 font-medium text-sm border-b-2 transition-colors ${
+                        clientMode === 'select'
+                          ? 'border-quipux-blue text-quipux-blue'
+                          : 'border-transparent text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      Seleccionar existente
+                    </button>
+                    <button
+                      onClick={() => setClientMode('create')}
+                      className={`py-2 px-4 font-medium text-sm border-b-2 transition-colors ${
+                        clientMode === 'create'
+                          ? 'border-quipux-blue text-quipux-blue'
+                          : 'border-transparent text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      Crear nuevo
+                    </button>
+                  </div>
+
+                  {clientMode === 'select' ? (
+                    <div className="space-y-4">
+                      <div className="relative">
+                        <input
+                          type="text"
+                          placeholder="Buscar por nombre o entidad..."
+                          value={clientSearch}
+                          onChange={(e) => setClientSearch(e.target.value)}
+                          className="w-full border border-gray-300 rounded-lg pl-10 pr-4 py-2 focus:ring-2 focus:ring-quipux-blue focus:border-quipux-blue outline-none"
+                        />
+                        <div className="absolute left-3 top-2.5 text-gray-400">
+                          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                          </svg>
+                        </div>
+                      </div>
+
+                      {loadingClients ? (
+                        <div className="py-8 text-center text-gray-500">Cargando clientes...</div>
+                      ) : filteredClients.length > 0 ? (
+                        <div className="max-h-64 overflow-y-auto border border-gray-200 rounded-lg divide-y">
+                          {filteredClients.map((c) => (
+                            <div
+                              key={c.id}
+                              onClick={() => setClient(c)}
+                              className="p-4 hover:bg-gray-50 cursor-pointer flex justify-between items-center transition-colors"
+                            >
+                              <div>
+                                <p className="font-bold text-gray-900">{c.name}</p>
+                                <p className="text-sm text-gray-600">{c.entity} {c.city ? `— ${c.city}` : ''}</p>
+                                {c.email && <p className="text-xs text-gray-400">{c.email}</p>}
+                              </div>
+                              <div className="text-quipux-blue">
+                                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                                </svg>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="py-8 text-center text-gray-500 border border-dashed border-gray-300 rounded-lg">
+                          {existingClients.length === 0 
+                            ? "No hay clientes registrados. Crea uno nuevo."
+                            : "No se encontraron clientes que coincidan con la búsqueda."}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <ClientForm onClientCreated={(newClient) => {
+                      setExistingClients(prev => [newClient, ...prev])
+                      setClient(newClient)
+                      setClientMode('select')
+                    }} />
+                  )}
+                </div>
               )}
             </div>
           </div>
