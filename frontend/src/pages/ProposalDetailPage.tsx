@@ -308,7 +308,7 @@ const ProposalDetailPage: React.FC = () => {
           </div>
         )
       case 'reviewed':
-        if (user.role !== 'creator') return null
+        if (user.role !== 'approver_1') return null
         return (
           <button
             onClick={handleSubmitForReview}
@@ -339,7 +339,7 @@ const ProposalDetailPage: React.FC = () => {
           </div>
         )
       case 'approved':
-        if (user.role !== 'creator') return null
+        if (user.role !== 'approver_2') return null
         return (
           <button
             onClick={handleSubmitForReview}

@@ -160,7 +160,7 @@ export type UserRole = 'admin' | 'creator' | 'approver_1' | 'approver_2' | 'view
 export const USER_ROLE_LABELS: Record<UserRole, string> = {
   admin: 'Administrador',
   creator: 'Creador',
-  approver_1: 'Revisora',
+  approver_1: 'Revisor',
   approver_2: 'VP',
   viewer: 'Visor',
 }

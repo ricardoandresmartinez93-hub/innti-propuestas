@@ -105,13 +105,25 @@ describe('ProposalDetailPage Approval Flow', () => {
     })
   })
 
-  it('shows "Enviar a VP" button when status is reviewed', async () => {
+  it('shows "Enviar a VP" button for approver_1 (Angela) when status is reviewed', async () => {
+    mockUser('approver_1')
     vi.mocked(proposalApi.get).mockResolvedValue({ data: { ...mockProposal, status: 'reviewed' } } as any)
 
     renderWithRouter()
 
     await waitFor(() => {
       expect(screen.getByText(/Enviar a VP →/i)).toBeInTheDocument()
+    })
+  })
+
+  it('does NOT show "Enviar a VP" button for creator when status is reviewed', async () => {
+    mockUser('creator')
+    vi.mocked(proposalApi.get).mockResolvedValue({ data: { ...mockProposal, status: 'reviewed' } } as any)
+
+    renderWithRouter()
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Enviar a VP →/i)).not.toBeInTheDocument()
     })
   })
 
@@ -127,13 +139,25 @@ describe('ProposalDetailPage Approval Flow', () => {
     })
   })
 
-  it('shows "Marcar como Enviada al Cliente" button when status is approved', async () => {
+  it('shows "Marcar como Enviada al Cliente" button for approver_2 when status is approved', async () => {
+    mockUser('approver_2')
     vi.mocked(proposalApi.get).mockResolvedValue({ data: { ...mockProposal, status: 'approved' } } as any)
 
     renderWithRouter()
 
     await waitFor(() => {
       expect(screen.getByText(/Marcar como Enviada al Cliente/i)).toBeInTheDocument()
+    })
+  })
+
+  it('does NOT show "Marcar como Enviada al Cliente" button for creator when status is approved', async () => {
+    mockUser('creator')
+    vi.mocked(proposalApi.get).mockResolvedValue({ data: { ...mockProposal, status: 'approved' } } as any)
+
+    renderWithRouter()
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Marcar como Enviada al Cliente/i)).not.toBeInTheDocument()
     })
   })
 

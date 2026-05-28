@@ -15,7 +15,7 @@ export default function Layout() {
     switch (role) {
       case 'admin': return { label: 'Administrador', color: 'bg-red-700' }
       case 'creator': return { label: 'Creador', color: 'bg-green-600' }
-      case 'approver_1': return { label: 'Revisora', color: 'bg-purple-600' }
+      case 'approver_1': return { label: 'Revisor', color: 'bg-purple-600' }
       case 'approver_2': return { label: 'VP', color: 'bg-orange-600' }
       case 'viewer': return { label: 'Visor', color: 'bg-gray-600' }
       default: return { label: role, color: 'bg-gray-600' }

@@ -106,7 +106,7 @@ describe('AdminPage', () => {
     expect(screen.getByText(/No se pudo cargar la lista de usuarios/i)).toBeInTheDocument()
   })
 
-  it('muestra etiquetas de rol correctas (Revisora, VP, sin apellidos)', async () => {
+  it('muestra etiquetas de rol correctas (Revisor, VP, sin apellidos)', async () => {
     const usersWithAllRoles: AppUser[] = [
       { id: 1, full_name: 'U1', email: 'u1@test.com', role: 'approver_1', is_active: true, created_at: '', updated_at: '' },
       { id: 2, full_name: 'U2', email: 'u2@test.com', role: 'approver_2', is_active: true, created_at: '', updated_at: '' },
@@ -116,7 +116,7 @@ describe('AdminPage', () => {
     renderPage()
     await waitForLoad()
 
-    expect(screen.getByText('Revisora')).toBeInTheDocument()
+    expect(screen.getByText('Revisor')).toBeInTheDocument()
     expect(screen.getByText('VP')).toBeInTheDocument()
     expect(screen.queryByText(/Ángela/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Juan Pablo/i)).not.toBeInTheDocument()
