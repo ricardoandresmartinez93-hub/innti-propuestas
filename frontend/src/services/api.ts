@@ -75,14 +75,14 @@ export const proposalApi = {
     api.post(`/proposals/${id}/generate-document`, null, {
       params: { use_innti: useInnti },
       responseType: 'blob',
-      timeout: 120_000, // 2 min — python-docx puede tardar con documentos grandes
+      timeout: 300_000, // 5 min — Innti hace 8+ llamadas secuenciales + generación Word
     }),
 
   generatePdf: (id: number, useInnti = false) =>
     api.post(`/proposals/${id}/generate-pdf`, null, {
       params: { use_innti: useInnti },
       responseType: 'blob',
-      timeout: 120_000,
+      timeout: 300_000,
     }),
 
   generateAnnex: (id: number) =>
