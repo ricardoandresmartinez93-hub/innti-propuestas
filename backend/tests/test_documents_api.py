@@ -16,6 +16,8 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 from fastapi import status
 
+from app.services.innti_service import InntiServiceError
+
 DOCX_MEDIA_TYPE = (
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 )
@@ -273,3 +275,131 @@ def test_generate_annex_success(client, sample_client_data, sample_proposal_data
 
     assert response.status_code == status.HTTP_200_OK
     assert len(response.content) > 0
+
+
+# ── Tests: resiliencia ante fallos parciales de Innti ─────────────────────────
+def test_generate_document_innti_cover_letter_failure_uses_fallback(
+    client, sample_client_data, sample_proposal_data
+):
+    """
+    Cuando generate_cover_letter lanza InntiServiceError se usa el template
+    de respaldo: letter_content queda NO vacío y las demás secciones se persisten.
+    """
+    pid = _create_proposal(client, sample_client_data, sample_proposal_data)
+
+    with patch("app.routers.documents.PortfolioService") as MockPortfolio:
+        MockPortfolio.return_value.get_by_names.return_value = []
+
+        with patch("app.routers.documents.InntiService") as MockInntiCls:
+            mock_innti = MagicMock()
+            MockInntiCls.return_value = mock_innti
+            mock_innti.generate_context_section.return_value = "contexto generado"
+            mock_innti.generate_scope_section.return_value = "alcance generado"
+            mock_innti.generate_cover_letter.side_effect = InntiServiceError("timeout")
+            mock_innti.generate_validity_section.return_value = "plazo generado"
+            mock_innti.generate_economic_conditions_section.return_value = "condiciones"
+            mock_innti.generate_payment_terms_section.return_value = "forma de pago"
+            mock_innti.generate_excluded_services_section.return_value = "excluidos"
+            mock_innti.generate_ip_section.return_value = "ip"
+
+            response = client.post(
+                f"/api/proposals/{pid}/generate-document",
+                params={"use_innti": True},
+            )
+
+    assert response.status_code == status.HTTP_200_OK
+
+    updated = client.get(f"/api/proposals/{pid}")
+    data = updated.json()
+    assert data["context_content"] == "contexto generado", (
+        "context_content debe persistirse aunque cover_letter falle"
+    )
+    assert data["scope_content"] == "alcance generado", (
+        "scope_content debe persistirse aunque cover_letter falle"
+    )
+    # Con el fallback, letter_content debe ser el template (no vacío)
+    assert data["letter_content"], (
+        "letter_content debe usar el template de respaldo cuando Innti falla"
+    )
+    assert "Juan Pablo Ramírez Madrid" in data["letter_content"], (
+        "El template de respaldo debe incluir la firma del VP"
+    )
+
+
+def test_generate_document_innti_cover_letter_empty_uses_fallback(
+    client, sample_client_data, sample_proposal_data
+):
+    """
+    Cuando generate_cover_letter devuelve string vacío (sin excepción)
+    se usa igualmente el template de respaldo.
+    """
+    pid = _create_proposal(client, sample_client_data, sample_proposal_data)
+
+    with patch("app.routers.documents.PortfolioService") as MockPortfolio:
+        MockPortfolio.return_value.get_by_names.return_value = []
+
+        with patch("app.routers.documents.InntiService") as MockInntiCls:
+            mock_innti = MagicMock()
+            MockInntiCls.return_value = mock_innti
+            mock_innti.generate_context_section.return_value = "contexto"
+            mock_innti.generate_scope_section.return_value = "alcance"
+            mock_innti.generate_cover_letter.return_value = ""   # vacío, no excepción
+            mock_innti.generate_validity_section.return_value = "plazo"
+            mock_innti.generate_economic_conditions_section.return_value = "condiciones"
+            mock_innti.generate_payment_terms_section.return_value = "pago"
+            mock_innti.generate_excluded_services_section.return_value = "excluidos"
+            mock_innti.generate_ip_section.return_value = "ip"
+
+            response = client.post(
+                f"/api/proposals/{pid}/generate-document",
+                params={"use_innti": True},
+            )
+
+    assert response.status_code == status.HTTP_200_OK
+
+    updated = client.get(f"/api/proposals/{pid}")
+    data = updated.json()
+    assert data["letter_content"], (
+        "letter_content debe usar el template cuando Innti devuelve vacío"
+    )
+    assert "Juan Pablo Ramírez Madrid" in data["letter_content"]
+
+
+def test_generate_document_innti_all_sections_persisted(
+    client, sample_client_data, sample_proposal_data
+):
+    """
+    Cuando todas las llamadas Innti tienen éxito, TODAS las secciones
+    (incluida letter_content) se persisten en la BD.
+    """
+    pid = _create_proposal(client, sample_client_data, sample_proposal_data)
+
+    with patch("app.routers.documents.PortfolioService") as MockPortfolio:
+        MockPortfolio.return_value.get_by_names.return_value = []
+
+        with patch("app.routers.documents.InntiService") as MockInntiCls:
+            mock_innti = MagicMock()
+            MockInntiCls.return_value = mock_innti
+            mock_innti.generate_context_section.return_value = "contexto"
+            mock_innti.generate_scope_section.return_value = "alcance"
+            mock_innti.generate_cover_letter.return_value = "<p>Carta generada</p>"
+            mock_innti.generate_validity_section.return_value = "plazo"
+            mock_innti.generate_economic_conditions_section.return_value = "condiciones"
+            mock_innti.generate_payment_terms_section.return_value = "pago"
+            mock_innti.generate_excluded_services_section.return_value = "excluidos"
+            mock_innti.generate_ip_section.return_value = "ip"
+
+            response = client.post(
+                f"/api/proposals/{pid}/generate-document",
+                params={"use_innti": True},
+            )
+
+    assert response.status_code == status.HTTP_200_OK
+
+    updated = client.get(f"/api/proposals/{pid}")
+    data = updated.json()
+    assert data["context_content"] == "contexto"
+    assert data["scope_content"] == "alcance"
+    assert data["letter_content"] == "<p>Carta generada</p>", (
+        "letter_content debe persistirse cuando generate_cover_letter tiene éxito"
+    )

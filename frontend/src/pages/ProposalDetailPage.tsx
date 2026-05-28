@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { proposalApi } from '../services/api'
 import {
@@ -23,6 +23,7 @@ const ProposalDetailPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isGenerating, setIsGenerating] = useState<string | null>(null)
   const [isGeneratingInnti, setIsGeneratingInnti] = useState(false)
+  const [proposalVersion, setProposalVersion] = useState(0)
   const [showApprovalModal, setShowApprovalModal] = useState(false)
   const [approvalForm, setApprovalForm] = useState<{
     approver_name: string
@@ -130,6 +131,21 @@ const ProposalDetailPage: React.FC = () => {
       ])
       setProposal(proposalRes.data)
       setApprovals(approvalsRes.data)
+      setProposalVersion(v => v + 1)
+
+      // Llamada imperativa directa: actualiza el editor con datos frescos sin
+      // depender de la cadena reactiva memo→prop→effect.
+      editorRef.current?.refreshContent({
+        context_content: proposalRes.data.context_content || '',
+        scope_content: proposalRes.data.scope_content || '',
+        validity_period: proposalRes.data.validity_period || '',
+        economic_conditions: proposalRes.data.economic_conditions || '',
+        payment_terms: proposalRes.data.payment_terms || '',
+        excluded_services: proposalRes.data.excluded_services || '',
+        ip_section: proposalRes.data.ip_section || '',
+        letter_content: proposalRes.data.letter_content || '',
+      })
+
       alert('Contenido generado con Innti exitosamente.')
     } catch (err) {
       console.error('Error generating with Innti:', err)
@@ -338,6 +354,17 @@ const ProposalDetailPage: React.FC = () => {
     }
   }
 
+  const editorInitialContent = useMemo(() => ({
+    context_content: proposal?.context_content || '',
+    scope_content: proposal?.scope_content || '',
+    validity_period: proposal?.validity_period || '',
+    economic_conditions: proposal?.economic_conditions || '',
+    payment_terms: proposal?.payment_terms || '',
+    excluded_services: proposal?.excluded_services || '',
+    ip_section: proposal?.ip_section || '',
+    letter_content: proposal?.letter_content || '',
+  }), [proposal?.id, proposalVersion]) // eslint-disable-line react-hooks/exhaustive-deps
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -375,18 +402,9 @@ const ProposalDetailPage: React.FC = () => {
         <div className="lg:col-span-3 space-y-6">
           <ProposalEditor
             ref={editorRef}
-            key={proposal.updated_at}
+            key={proposal.id}
             proposalId={proposal.id}
-            initialContent={{
-              context_content: proposal.context_content || '',
-              scope_content: proposal.scope_content || '',
-              validity_period: proposal.validity_period || '',
-              economic_conditions: proposal.economic_conditions || '',
-              payment_terms: proposal.payment_terms || '',
-              excluded_services: proposal.excluded_services || '',
-              ip_section: proposal.ip_section || '',
-              letter_content: proposal.letter_content || '',
-            }}
+            initialContent={editorInitialContent}
           />
 
           {/* Historial de Aprobaciones */}

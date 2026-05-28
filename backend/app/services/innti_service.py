@@ -115,7 +115,8 @@ class InntiService:
             f"La carta debe mencionar el compromiso de Quipux con la innovación y los excelentes "
             f"niveles de servicio. Debe indicar que la propuesta está ajustada a las expectativas "
             f"del proyecto. Firmar como 'Juan Pablo Ramírez Madrid, Vicepresidente de Nuevos Negocios'. "
-            f"No incluir fecha ni encabezados de carta (solo el cuerpo)."
+            f"No incluir fecha ni encabezados de carta (solo el cuerpo). "
+            f"Retornar HTML con párrafos (<p>). No incluir título de sección."
         )
         return self.generate_text(system_prompt, user_prompt, max_tokens=500, temperature=0.5)
 

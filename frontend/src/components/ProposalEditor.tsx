@@ -18,6 +18,8 @@ export interface ProposalEditorHandle {
   save: (silent?: boolean) => Promise<void>
   /** True cuando hay cambios pendientes de guardar. */
   hasUnsavedChanges: boolean
+  /** Reemplaza todo el contenido del editor con datos frescos del servidor. */
+  refreshContent: (content: Record<string, string>) => void
 }
 
 const SECTIONS = [
@@ -185,6 +187,16 @@ const ProposalEditor = forwardRef<ProposalEditorHandle, ProposalEditorProps>(
     }
   }, [activeTab, editor])
 
+  // Sync all section contents when server data changes (e.g., after Innti generation)
+  useEffect(() => {
+    setContents(initialContent)
+    setHasUnsavedChanges(false)
+    if (!editor) return
+    editor.commands.setContent(initialContent[activeTabRef.current] || '')
+    const section = SECTIONS.find((s) => s.id === activeTabRef.current)
+    editor.setEditable(!section?.readOnly)
+  }, [initialContent, editor]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleSave = async (silent = false) => {
     setIsSaving(true)
     try {
@@ -200,10 +212,20 @@ const ProposalEditor = forwardRef<ProposalEditorHandle, ProposalEditorProps>(
     }
   }
 
-  // Exponer save() y hasUnsavedChanges al componente padre mediante ref
+  // Exponer save(), hasUnsavedChanges y refreshContent al componente padre
   useImperativeHandle(ref, () => ({
     save: (silent = false) => handleSave(silent),
     hasUnsavedChanges,
+    refreshContent: (content: Record<string, string>) => {
+      setContents(content)
+      setHasUnsavedChanges(false)
+      if (editor) {
+        // emitUpdate=false evita que onUpdate marque el editor como "con cambios"
+        editor.commands.setContent(content[activeTabRef.current] || '', false)
+        const section = SECTIONS.find((s) => s.id === activeTabRef.current)
+        editor.setEditable(!section?.readOnly)
+      }
+    },
   }))
 
   const activeSection = SECTIONS.find((s) => s.id === activeTab)

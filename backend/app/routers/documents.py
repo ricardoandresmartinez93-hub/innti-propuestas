@@ -1,8 +1,11 @@
 """
 Endpoints para generación de documentos Word y PDF.
 """
+import logging
 import zipfile
 from fastapi import APIRouter, Depends, HTTPException, status
+
+log = logging.getLogger(__name__)
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from pathlib import Path
@@ -29,6 +32,37 @@ SCHEME_LABEL = {
 }
 
 
+def _cover_letter_fallback(
+    client_name: str,
+    client_position: str,
+    client_entity: str,
+    proposal_title: str,
+) -> str:
+    """
+    Template HTML para la carta de presentación.
+    Se usa cuando Innti no responde o devuelve contenido vacío.
+    """
+    position_part = f", {client_position}" if client_position else ""
+    return (
+        f"<p>Estimado(a) señor(a) <strong>{client_name}</strong>{position_part},</p>"
+        f"<p>Por medio de la presente, Quipux S.A.S. tiene el agrado de presentar a "
+        f"<strong>{client_entity}</strong> la propuesta comercial denominada "
+        f'<strong>"{proposal_title}"</strong>, elaborada con el propósito de apoyar '
+        f"sus objetivos de transformación digital y contribuir a la modernización de la "
+        f"gestión pública de manera eficiente y sostenible.</p>"
+        f"<p>En Quipux S.A.S. nos comprometemos con los más altos estándares de innovación "
+        f"y excelentes niveles de servicio. La propuesta que ponemos a su consideración ha "
+        f"sido ajustada a las expectativas del proyecto y refleja nuestra experiencia y "
+        f"capacidad técnica para acompañar a su institución en este proceso.</p>"
+        f"<p>Quedamos atentos a sus comentarios y a disposición para cualquier ampliación "
+        f"de la información contenida en este documento.</p>"
+        f"<p>Cordialmente,</p>"
+        f"<p><strong>Juan Pablo Ramírez Madrid</strong><br/>"
+        f"Vicepresidente de Nuevos Negocios<br/>"
+        f"Quipux S.A.S.</p>"
+    )
+
+
 def _get_output_dir() -> Path:
     output_dir = Path(tempfile.gettempdir()) / "innti_docs"
     output_dir.mkdir(exist_ok=True)
@@ -42,8 +76,8 @@ def _prepare_proposal_content(
 ) -> dict:
     """
     Resuelve el contenido textual de la propuesta.
-    Si use_innti=True intenta generar con Innti y persiste el resultado.
-    Siempre devuelve un dict con las claves de texto.
+    Si use_innti=True genera con Innti y persiste el resultado.
+    Cada sección tiene su propio try/except: un fallo parcial no cancela las demás.
     """
     client = proposal.client
     product_names = [p.product_name for p in proposal.products]
@@ -60,46 +94,83 @@ def _prepare_proposal_content(
     }
 
     if use_innti:
-        try:
-            innti = InntiService()
-            scheme_type_str = ", ".join(s.scheme_type.value for s in proposal.schemes)
+        innti = InntiService()
+        scheme_type_str = ", ".join(s.scheme_type.value for s in proposal.schemes)
+        scheme_label = " / ".join(s.scheme_type.value for s in proposal.schemes)
 
+        try:
             content["context_text"] = innti.generate_context_section(
                 client.entity, proposal.title
             )
+        except InntiServiceError as e:
+            log.warning("Innti [context]: %s", e)
+
+        try:
             content["scope_text"] = innti.generate_scope_section(
                 product_names, scheme_type_str
             )
-            content["letter_text"] = innti.generate_cover_letter(
-                client.name,
-                client.position or "",
-                client.entity,
-                proposal.title,
+        except InntiServiceError as e:
+            log.warning("Innti [scope]: %s", e)
+
+        try:
+            result = innti.generate_cover_letter(
+                client.name, client.position or "", client.entity, proposal.title
             )
+            if result:
+                content["letter_text"] = result
+            else:
+                log.warning("Innti [letter]: returned empty — using fallback template")
+                content["letter_text"] = _cover_letter_fallback(
+                    client.name, client.position or "", client.entity, proposal.title
+                )
+        except InntiServiceError as e:
+            log.warning("Innti [letter]: %s — using fallback template", e)
+            content["letter_text"] = _cover_letter_fallback(
+                client.name, client.position or "", client.entity, proposal.title
+            )
+
+        try:
             content["validity_period"] = innti.generate_validity_section(scheme_type_str)
+        except InntiServiceError as e:
+            log.warning("Innti [validity]: %s", e)
+
+        try:
             content["economic_conditions"] = innti.generate_economic_conditions_section(
-                product_names,
-                scheme_type_str,
-                " / ".join(s.scheme_type.value for s in proposal.schemes),
+                product_names, scheme_type_str, scheme_label
             )
+        except InntiServiceError as e:
+            log.warning("Innti [economic_conditions]: %s", e)
+
+        try:
             content["payment_terms"] = innti.generate_payment_terms_section(scheme_type_str)
-            excluded = innti.generate_excluded_services_section()
-            ip_sec = innti.generate_ip_section(client.entity)
-            content["excluded_services_text"] = excluded
-            content["ip_section_text"] = ip_sec
+        except InntiServiceError as e:
+            log.warning("Innti [payment_terms]: %s", e)
 
-            proposal.context_content = content["context_text"]
-            proposal.scope_content = content["scope_text"]
-            proposal.letter_content = content["letter_text"]
-            proposal.validity_period = content["validity_period"]
-            proposal.economic_conditions = content["economic_conditions"]
-            proposal.payment_terms = content["payment_terms"]
-            proposal.excluded_services = excluded
-            proposal.ip_section = ip_sec
-            db.commit()
+        try:
+            content["excluded_services_text"] = innti.generate_excluded_services_section()
+        except InntiServiceError as e:
+            log.warning("Innti [excluded_services]: %s", e)
 
-        except InntiServiceError:
-            pass  # Fallback: usar valores ya en content
+        try:
+            content["ip_section_text"] = innti.generate_ip_section(client.entity)
+        except InntiServiceError as e:
+            log.warning("Innti [ip_section]: %s", e)
+
+        log.info(
+            "Innti generation complete — letter=%d chars, context=%d chars",
+            len(content["letter_text"] or ""),
+            len(content["context_text"] or ""),
+        )
+
+        proposal.context_content = content["context_text"]
+        proposal.scope_content = content["scope_text"]
+        proposal.letter_content = content["letter_text"]
+        proposal.validity_period = content["validity_period"]
+        proposal.economic_conditions = content["economic_conditions"]
+        proposal.payment_terms = content["payment_terms"]
+        proposal.excluded_services = content["excluded_services_text"]
+        proposal.ip_section = content["ip_section_text"]
+        db.commit()
 
     return content
 
@@ -221,15 +292,24 @@ def _build_separate_docx_files(
         content = dict(base_content)
 
         if use_innti:
+            innti = InntiService()
+
             try:
-                innti = InntiService()
                 content["validity_period"] = innti.generate_validity_section(scheme_str)
+            except InntiServiceError:
+                pass
+
+            try:
                 content["economic_conditions"] = innti.generate_economic_conditions_section(
                     product_names, scheme_str, label
                 )
+            except InntiServiceError:
+                pass
+
+            try:
                 content["payment_terms"] = innti.generate_payment_terms_section(scheme_str)
             except InntiServiceError:
-                pass  # Fallback: mantener el contenido combinado del base_content
+                pass
 
         filename = f"propuesta_{proposal_id}_{label}.docx"
         output_path = output_dir / filename
