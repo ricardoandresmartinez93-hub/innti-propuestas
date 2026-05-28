@@ -10,18 +10,16 @@ def test_list_proposals_empty(client):
     assert response.status_code == status.HTTP_200_OK
     assert response.json() == []
 
-def test_create_proposal_success(client, sample_client_data, sample_proposal_data):
+def test_create_proposal_success(client, creator_headers, sample_client_data, sample_proposal_data):
     """Crear propuesta con cliente y productos."""
-    # 1. Crear cliente
     client_res = client.post("/api/clients/", json=sample_client_data)
     assert client_res.status_code == status.HTTP_201_CREATED
     client_id = client_res.json()["id"]
 
-    # 2. Crear propuesta
     proposal_data = sample_proposal_data.copy()
     proposal_data["client_id"] = client_id
 
-    response = client.post("/api/proposals/", json=proposal_data)
+    response = client.post("/api/proposals/", json=proposal_data, headers=creator_headers)
     assert response.status_code == status.HTTP_201_CREATED
 
     data = response.json()
@@ -30,26 +28,31 @@ def test_create_proposal_success(client, sample_client_data, sample_proposal_dat
     assert len(data["products"]) == 2
     assert data["status"] == "draft"
 
-def test_create_proposal_invalid_client(client, sample_proposal_data):
+def test_create_proposal_invalid_client(client, creator_headers, sample_proposal_data):
     """Error 404 si el cliente no existe."""
     proposal_data = sample_proposal_data.copy()
-    proposal_data["client_id"] = 9999  # ID inexistente
+    proposal_data["client_id"] = 9999
 
-    response = client.post("/api/proposals/", json=proposal_data)
+    response = client.post("/api/proposals/", json=proposal_data, headers=creator_headers)
     assert response.status_code == status.HTTP_404_NOT_FOUND
     assert "no encontrado" in response.json()["detail"]
 
-def test_update_proposal_content(client, sample_client_data, sample_proposal_data):
+def test_create_proposal_requires_auth(client, sample_proposal_data):
+    """POST /proposals/ devuelve 401 sin token."""
+    proposal_data = sample_proposal_data.copy()
+    proposal_data["client_id"] = 1
+    response = client.post("/api/proposals/", json=proposal_data)
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+def test_update_proposal_content(client, creator_headers, sample_client_data, sample_proposal_data):
     """PATCH para editar condiciones económicas."""
-    # 1. Preparar propuesta
     client_res = client.post("/api/clients/", json=sample_client_data)
     client_id = client_res.json()["id"]
     proposal_data = sample_proposal_data.copy()
     proposal_data["client_id"] = client_id
-    prop_res = client.post("/api/proposals/", json=proposal_data)
+    prop_res = client.post("/api/proposals/", json=proposal_data, headers=creator_headers)
     proposal_id = prop_res.json()["id"]
 
-    # 2. Actualizar
     update_data = {
         "economic_conditions": "<p>Nuevas condiciones 2024</p>",
         "payment_terms": "Contado"
@@ -61,75 +64,81 @@ def test_update_proposal_content(client, sample_client_data, sample_proposal_dat
     assert data["economic_conditions"] == update_data["economic_conditions"]
     assert data["payment_terms"] == update_data["payment_terms"]
 
-def test_delete_proposal(client, sample_client_data, sample_proposal_data):
-    """Eliminar propuesta."""
-    # 1. Preparar propuesta
+def test_delete_proposal(client, creator_headers, sample_client_data, sample_proposal_data):
+    """Eliminar propuesta en DRAFT."""
     client_res = client.post("/api/clients/", json=sample_client_data)
     client_id = client_res.json()["id"]
     proposal_data = sample_proposal_data.copy()
     proposal_data["client_id"] = client_id
-    prop_res = client.post("/api/proposals/", json=proposal_data)
+    prop_res = client.post("/api/proposals/", json=proposal_data, headers=creator_headers)
     proposal_id = prop_res.json()["id"]
 
-    # 2. Eliminar
-    response = client.delete(f"/api/proposals/{proposal_id}")
+    response = client.delete(f"/api/proposals/{proposal_id}", headers=creator_headers)
     assert response.status_code == status.HTTP_204_NO_CONTENT
 
-    # 3. Verificar que no existe
     get_res = client.get(f"/api/proposals/{proposal_id}")
     assert get_res.status_code == status.HTTP_404_NOT_FOUND
 
-def test_delete_proposal_draft_success(client, sample_client_data, sample_proposal_data):
+def test_delete_proposal_requires_auth(client, creator_headers, sample_client_data, sample_proposal_data):
+    """DELETE /proposals/{id} devuelve 401 sin token."""
+    client_res = client.post("/api/clients/", json=sample_client_data)
+    client_id = client_res.json()["id"]
+    proposal_data = sample_proposal_data.copy()
+    proposal_data["client_id"] = client_id
+    prop_res = client.post("/api/proposals/", json=proposal_data, headers=creator_headers)
+    proposal_id = prop_res.json()["id"]
+
+    response = client.delete(f"/api/proposals/{proposal_id}")
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+def test_delete_proposal_draft_success(client, creator_headers, sample_client_data, sample_proposal_data):
     """DELETE exitoso cuando la propuesta está en DRAFT."""
     client_res = client.post("/api/clients/", json=sample_client_data)
     client_id = client_res.json()["id"]
     proposal_data = sample_proposal_data.copy()
     proposal_data["client_id"] = client_id
-    prop_res = client.post("/api/proposals/", json=proposal_data)
+    prop_res = client.post("/api/proposals/", json=proposal_data, headers=creator_headers)
     proposal_id = prop_res.json()["id"]
     assert prop_res.json()["status"] == "draft"
 
-    response = client.delete(f"/api/proposals/{proposal_id}")
+    response = client.delete(f"/api/proposals/{proposal_id}", headers=creator_headers)
     assert response.status_code == status.HTTP_204_NO_CONTENT
 
     get_res = client.get(f"/api/proposals/{proposal_id}")
     assert get_res.status_code == status.HTTP_404_NOT_FOUND
 
 
-def test_delete_proposal_non_draft_fails(client, sample_client_data, sample_proposal_data):
+def test_delete_proposal_non_draft_fails(client, creator_headers, sample_client_data, sample_proposal_data):
     """DELETE rechazado con 409 si la propuesta no está en DRAFT."""
     client_res = client.post("/api/clients/", json=sample_client_data)
     client_id = client_res.json()["id"]
     proposal_data = sample_proposal_data.copy()
     proposal_data["client_id"] = client_id
-    prop_res = client.post("/api/proposals/", json=proposal_data)
+    prop_res = client.post("/api/proposals/", json=proposal_data, headers=creator_headers)
     proposal_id = prop_res.json()["id"]
 
     # Avanzar a PENDING_REVIEW
     client.post(f"/api/proposals/{proposal_id}/submit-review")
 
-    response = client.delete(f"/api/proposals/{proposal_id}")
+    response = client.delete(f"/api/proposals/{proposal_id}", headers=creator_headers)
     assert response.status_code == status.HTTP_409_CONFLICT
     assert "DRAFT" in response.json()["detail"]
 
 
-def test_full_approval_flow(client, sample_client_data, sample_proposal_data):
+def test_full_approval_flow(client, creator_headers, approver_1_headers, approver_2_headers, sample_client_data, sample_proposal_data):
     """Crear -> submit_review -> approve(reviewer) -> approve(VP)."""
-    # 1. Crear propuesta
     client_res = client.post("/api/clients/", json=sample_client_data)
     client_id = client_res.json()["id"]
     proposal_data = sample_proposal_data.copy()
     proposal_data["client_id"] = client_id
-    prop_res = client.post("/api/proposals/", json=proposal_data)
+    prop_res = client.post("/api/proposals/", json=proposal_data, headers=creator_headers)
     proposal_id = prop_res.json()["id"]
     assert prop_res.json()["status"] == "draft"
 
-    # 2. Enviar a revisión
     submit_res = client.post(f"/api/proposals/{proposal_id}/submit-review")
     assert submit_res.status_code == status.HTTP_200_OK
     assert submit_res.json()["status"] == "pending_review"
 
-    # 3. Aprobación Reviewer (Ángela)
     angela_app = {
         "approver_name": "Ángela",
         "approver_email": "angela@innti.com",
@@ -137,19 +146,16 @@ def test_full_approval_flow(client, sample_client_data, sample_proposal_data):
         "action": "approved",
         "comments": "OK para VP"
     }
-    app1_res = client.post(f"/api/proposals/{proposal_id}/approve", json=angela_app)
+    app1_res = client.post(f"/api/proposals/{proposal_id}/approve", json=angela_app, headers=approver_1_headers)
     assert app1_res.status_code == status.HTTP_200_OK
 
-    # Verificar cambio de estado en la propuesta
     prop_status_res = client.get(f"/api/proposals/{proposal_id}")
     assert prop_status_res.json()["status"] == "reviewed"
 
-    # 3.5 Enviar a VP
     submit_vp_res = client.post(f"/api/proposals/{proposal_id}/submit-review")
     assert submit_vp_res.status_code == status.HTTP_200_OK
     assert submit_vp_res.json()["status"] == "pending_vp"
 
-    # 4. Aprobación VP (Juan Pablo)
     vp_app = {
         "approver_name": "Juan Pablo",
         "approver_email": "jp@innti.com",
@@ -157,9 +163,8 @@ def test_full_approval_flow(client, sample_client_data, sample_proposal_data):
         "action": "approved",
         "comments": "Aprobado totalmente"
     }
-    app2_res = client.post(f"/api/proposals/{proposal_id}/approve", json=vp_app)
+    app2_res = client.post(f"/api/proposals/{proposal_id}/approve", json=vp_app, headers=approver_2_headers)
     assert app2_res.status_code == status.HTTP_200_OK
 
-    # Verificar estado final
     final_prop_res = client.get(f"/api/proposals/{proposal_id}")
     assert final_prop_res.json()["status"] == "approved"

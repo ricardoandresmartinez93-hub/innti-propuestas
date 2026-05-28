@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     # Portafolio - ruta relativa desde la carpeta backend
     portfolio_file_path: str = "../ListaPortafolio.xlsx"
 
+    # JWT
+    jwt_secret_key: str = "CHANGE_ME_IN_PRODUCTION"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 480
+
     # App
     app_host: str = "0.0.0.0"
     app_port: int = 8000

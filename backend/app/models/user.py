@@ -28,6 +28,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     full_name = Column(String(200), nullable=False)
     email = Column(String(200), unique=True, index=True, nullable=False)
+    hashed_password = Column(String(200), nullable=True, comment="Contraseña hasheada con bcrypt")
     role = Column(Enum(UserRole), default=UserRole.creator, nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

@@ -7,6 +7,7 @@ import '@testing-library/jest-dom/vitest'
 import { MemoryRouter } from 'react-router-dom'
 import ProposalListPage from '../pages/ProposalListPage'
 import { proposalApi } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
 import type { Proposal } from '../types'
 
 vi.mock('../services/api', () => ({
@@ -14,6 +15,10 @@ vi.mock('../services/api', () => ({
     list: vi.fn(),
     delete: vi.fn(),
   },
+}))
+
+vi.mock('../contexts/AuthContext', () => ({
+  useAuth: vi.fn(),
 }))
 
 const mockProposals: Proposal[] = [
@@ -70,6 +75,13 @@ const waitForLoad = () =>
 describe('ProposalListPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(useAuth).mockReturnValue({
+      user: { id: 1, email: 'creator@test.com', full_name: 'Test Creator', role: 'creator' },
+      token: 'mock-token',
+      login: vi.fn(),
+      logout: vi.fn(),
+      isLoading: false,
+    })
   })
 
   afterEach(() => {
@@ -198,5 +210,26 @@ describe('ProposalListPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Cancelar/i }))
     expect(screen.queryByText(/Esta acción no se puede deshacer/i)).not.toBeInTheDocument()
+  })
+
+  it('Eliminar button visible for creator with draft status', async () => {
+    vi.mocked(proposalApi.list).mockResolvedValue({ data: mockProposals } as never)
+    renderPage()
+    await waitForLoad()
+    expect(screen.getByTestId('delete-btn-1')).toBeInTheDocument()
+  })
+
+  it('Eliminar button NOT visible for approver_1 even with draft status', async () => {
+    vi.mocked(useAuth).mockReturnValue({
+      user: { id: 2, email: 'approver@test.com', full_name: 'Test Approver', role: 'approver_1' },
+      token: 'mock-token',
+      login: vi.fn(),
+      logout: vi.fn(),
+      isLoading: false,
+    })
+    vi.mocked(proposalApi.list).mockResolvedValue({ data: mockProposals } as never)
+    renderPage()
+    await waitForLoad()
+    expect(screen.queryByTestId('delete-btn-1')).not.toBeInTheDocument()
   })
 })

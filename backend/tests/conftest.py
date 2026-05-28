@@ -15,6 +15,8 @@ from fastapi.testclient import TestClient
 
 from app.database import Base, get_db
 from app.main import app
+from app.models.user import User, UserRole
+from app.auth import get_password_hash, create_access_token
 
 
 # Base de datos en memoria para tests
@@ -48,6 +50,54 @@ def client(db_session: Session):
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def creator_headers(db_session: Session):
+    """Crea un usuario creator y retorna las cabeceras de autorización JWT."""
+    user = User(
+        full_name="Test Creator",
+        email="creator@test.com",
+        hashed_password=get_password_hash("testpass"),
+        role=UserRole.creator,
+        is_active=True,
+    )
+    db_session.add(user)
+    db_session.commit()
+    token = create_access_token({"sub": user.email, "user_id": user.id, "role": user.role})
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def approver_1_headers(db_session: Session):
+    """Crea un usuario approver_1 (Ángela) y retorna las cabeceras JWT."""
+    user = User(
+        full_name="Ángela Test",
+        email="angela@test.com",
+        hashed_password=get_password_hash("testpass"),
+        role=UserRole.approver_1,
+        is_active=True,
+    )
+    db_session.add(user)
+    db_session.commit()
+    token = create_access_token({"sub": user.email, "user_id": user.id, "role": user.role})
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def approver_2_headers(db_session: Session):
+    """Crea un usuario approver_2 (Juan Pablo VP) y retorna las cabeceras JWT."""
+    user = User(
+        full_name="Juan Pablo Test",
+        email="juanpablo@test.com",
+        hashed_password=get_password_hash("testpass"),
+        role=UserRole.approver_2,
+        is_active=True,
+    )
+    db_session.add(user)
+    db_session.commit()
+    token = create_access_token({"sub": user.email, "user_id": user.id, "role": user.role})
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture

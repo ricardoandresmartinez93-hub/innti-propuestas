@@ -18,6 +18,14 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('innti_token')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
 // --- Portafolio ---
 export const portfolioApi = {
   listProducts: (search?: string, productType?: string) => {

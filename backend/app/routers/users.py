@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User, UserRole
 from app.schemas.user import UserCreate, UserRead, UserUpdate
+from app.auth import get_password_hash
 
 router = APIRouter(
     prefix="/api/users",
@@ -38,7 +39,10 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
             detail="El email ya está registrado"
         )
     
-    new_user = User(**user.model_dump())
+    user_data = user.model_dump()
+    password = user_data.pop("password")
+    new_user = User(**user_data)
+    new_user.hashed_password = get_password_hash(password)
     db.add(new_user)
     db.commit()
     db.refresh(new_user)

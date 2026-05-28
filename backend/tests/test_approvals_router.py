@@ -13,14 +13,14 @@ from fastapi import status
 
 
 # ── Helpers para construir escenarios de estado ───────────────────────────────
-def _create_proposal(client, sample_client_data, sample_proposal_data) -> int:
+def _create_proposal(client, sample_client_data, sample_proposal_data, creator_headers) -> int:
     """Crea cliente y propuesta; devuelve el ID de la propuesta."""
     c_res = client.post("/api/clients/", json=sample_client_data)
     assert c_res.status_code == status.HTTP_201_CREATED
     client_id = c_res.json()["id"]
 
     p_data = {**sample_proposal_data, "client_id": client_id}
-    p_res = client.post("/api/proposals/", json=p_data)
+    p_res = client.post("/api/proposals/", json=p_data, headers=creator_headers)
     assert p_res.status_code == status.HTTP_201_CREATED
     return p_res.json()["id"]
 
@@ -31,35 +31,35 @@ def _advance_to_pending_review(client, pid: int) -> None:
     assert res.json()["status"] == "pending_review"
 
 
-def _advance_to_reviewed(client, pid: int) -> None:
+def _advance_to_reviewed(client, pid: int, approver_1_headers: dict) -> None:
     _advance_to_pending_review(client, pid)
-    res = client.post(f"/api/proposals/{pid}/approve", json={
+    res = client.post(f"/api/proposals/{pid}/approve", headers=approver_1_headers, json={
         "role": "reviewer", "approver_name": "Ángela",
         "approver_email": "angela@innti.com", "action": "approved",
     })
     assert res.status_code == status.HTTP_200_OK
 
 
-def _advance_to_pending_vp(client, pid: int) -> None:
-    _advance_to_reviewed(client, pid)
+def _advance_to_pending_vp(client, pid: int, approver_1_headers: dict) -> None:
+    _advance_to_reviewed(client, pid, approver_1_headers)
     res = client.post(f"/api/proposals/{pid}/submit-review")
     assert res.status_code == status.HTTP_200_OK
     assert res.json()["status"] == "pending_vp"
 
 
-def _advance_to_approved(client, pid: int) -> None:
-    _advance_to_pending_vp(client, pid)
-    res = client.post(f"/api/proposals/{pid}/approve", json={
+def _advance_to_approved(client, pid: int, approver_1_headers: dict, approver_2_headers: dict) -> None:
+    _advance_to_pending_vp(client, pid, approver_1_headers)
+    res = client.post(f"/api/proposals/{pid}/approve", headers=approver_2_headers, json={
         "role": "vp", "approver_name": "Juan Pablo",
         "approver_email": "jp@innti.com", "action": "approved",
     })
     assert res.status_code == status.HTTP_200_OK
 
 
-def _advance_to_rejected(client, pid: int) -> None:
+def _advance_to_rejected(client, pid: int, approver_1_headers: dict) -> None:
     """Avanza DRAFT → PENDING_REVIEW → REJECTED."""
     _advance_to_pending_review(client, pid)
-    res = client.post(f"/api/proposals/{pid}/reject", json={
+    res = client.post(f"/api/proposals/{pid}/reject", headers=approver_1_headers, json={
         "role": "reviewer", "approver_name": "Ángela",
         "approver_email": "angela@innti.com", "action": "rejected",
         "comments": "No cumple requisitos mínimos.",
@@ -74,29 +74,35 @@ def test_submit_review_proposal_not_found(client):
     assert res.status_code == status.HTTP_404_NOT_FOUND
 
 
-def test_submit_review_from_approved_to_sent(client, sample_client_data, sample_proposal_data):
+def test_submit_review_from_approved_to_sent(
+    client, sample_client_data, sample_proposal_data, creator_headers, approver_1_headers, approver_2_headers
+):
     """APPROVED → SENT_TO_CLIENT vía submit-review."""
-    pid = _create_proposal(client, sample_client_data, sample_proposal_data)
-    _advance_to_approved(client, pid)
+    pid = _create_proposal(client, sample_client_data, sample_proposal_data, creator_headers)
+    _advance_to_approved(client, pid, approver_1_headers, approver_2_headers)
 
     res = client.post(f"/api/proposals/{pid}/submit-review")
     assert res.status_code == status.HTTP_200_OK
     assert res.json()["status"] == "sent_to_client"
 
 
-def test_submit_review_from_rejected_to_draft(client, sample_client_data, sample_proposal_data):
+def test_submit_review_from_rejected_to_draft(
+    client, sample_client_data, sample_proposal_data, creator_headers, approver_1_headers
+):
     """REJECTED → DRAFT vía submit-review."""
-    pid = _create_proposal(client, sample_client_data, sample_proposal_data)
-    _advance_to_rejected(client, pid)
+    pid = _create_proposal(client, sample_client_data, sample_proposal_data, creator_headers)
+    _advance_to_rejected(client, pid, approver_1_headers)
 
     res = client.post(f"/api/proposals/{pid}/submit-review")
     assert res.status_code == status.HTTP_200_OK
     assert res.json()["status"] == "draft"
 
 
-def test_submit_review_from_invalid_state_returns_400(client, sample_client_data, sample_proposal_data):
+def test_submit_review_from_invalid_state_returns_400(
+    client, sample_client_data, sample_proposal_data, creator_headers
+):
     """submit-review desde PENDING_REVIEW (estado no procesable) → 400."""
-    pid = _create_proposal(client, sample_client_data, sample_proposal_data)
+    pid = _create_proposal(client, sample_client_data, sample_proposal_data, creator_headers)
     _advance_to_pending_review(client, pid)
 
     # PENDING_REVIEW no tiene transición permitida en submit-review
@@ -104,22 +110,26 @@ def test_submit_review_from_invalid_state_returns_400(client, sample_client_data
     assert res.status_code == status.HTTP_400_BAD_REQUEST
 
 
-def test_submit_review_from_pending_vp_returns_400(client, sample_client_data, sample_proposal_data):
+def test_submit_review_from_pending_vp_returns_400(
+    client, sample_client_data, sample_proposal_data, creator_headers, approver_1_headers
+):
     """submit-review desde PENDING_VP (estado no procesable) → 400."""
-    pid = _create_proposal(client, sample_client_data, sample_proposal_data)
-    _advance_to_pending_vp(client, pid)
+    pid = _create_proposal(client, sample_client_data, sample_proposal_data, creator_headers)
+    _advance_to_pending_vp(client, pid, approver_1_headers)
 
     res = client.post(f"/api/proposals/{pid}/submit-review")
     assert res.status_code == status.HTTP_400_BAD_REQUEST
 
 
 # ── Tests de rechazo ──────────────────────────────────────────────────────────
-def test_reject_proposal_from_pending_review(client, sample_client_data, sample_proposal_data):
+def test_reject_proposal_from_pending_review(
+    client, sample_client_data, sample_proposal_data, creator_headers, approver_1_headers
+):
     """Rechazo de la revisora (Angela) desde PENDING_REVIEW → REJECTED."""
-    pid = _create_proposal(client, sample_client_data, sample_proposal_data)
+    pid = _create_proposal(client, sample_client_data, sample_proposal_data, creator_headers)
     _advance_to_pending_review(client, pid)
 
-    res = client.post(f"/api/proposals/{pid}/reject", json={
+    res = client.post(f"/api/proposals/{pid}/reject", headers=approver_1_headers, json={
         "role": "reviewer",
         "approver_name": "Ángela",
         "approver_email": "angela@innti.com",
@@ -137,12 +147,14 @@ def test_reject_proposal_from_pending_review(client, sample_client_data, sample_
     assert prop["status"] == "rejected"
 
 
-def test_reject_proposal_from_pending_vp(client, sample_client_data, sample_proposal_data):
+def test_reject_proposal_from_pending_vp(
+    client, sample_client_data, sample_proposal_data, creator_headers, approver_1_headers, approver_2_headers
+):
     """Rechazo del VP (Juan Pablo) desde PENDING_VP → REJECTED."""
-    pid = _create_proposal(client, sample_client_data, sample_proposal_data)
-    _advance_to_pending_vp(client, pid)
+    pid = _create_proposal(client, sample_client_data, sample_proposal_data, creator_headers)
+    _advance_to_pending_vp(client, pid, approver_1_headers)
 
-    res = client.post(f"/api/proposals/{pid}/reject", json={
+    res = client.post(f"/api/proposals/{pid}/reject", headers=approver_2_headers, json={
         "role": "vp",
         "approver_name": "Juan Pablo",
         "approver_email": "jp@innti.com",
@@ -156,10 +168,12 @@ def test_reject_proposal_from_pending_vp(client, sample_client_data, sample_prop
 
 
 # ── Test de historial de aprobaciones ────────────────────────────────────────
-def test_get_proposal_approvals_history(client, sample_client_data, sample_proposal_data):
+def test_get_proposal_approvals_history(
+    client, sample_client_data, sample_proposal_data, creator_headers, approver_1_headers
+):
     """GET /{id}/approvals devuelve el historial completo de aprobaciones."""
-    pid = _create_proposal(client, sample_client_data, sample_proposal_data)
-    _advance_to_reviewed(client, pid)  # genera 1 aprobación de tipo reviewer
+    pid = _create_proposal(client, sample_client_data, sample_proposal_data, creator_headers)
+    _advance_to_reviewed(client, pid, approver_1_headers)  # genera 1 aprobación de tipo reviewer
 
     res = client.get(f"/api/proposals/{pid}/approvals")
     assert res.status_code == status.HTTP_200_OK
@@ -171,10 +185,12 @@ def test_get_proposal_approvals_history(client, sample_client_data, sample_propo
     assert first["action"] == "approved"
 
 
-def test_get_approvals_history_multiple(client, sample_client_data, sample_proposal_data):
+def test_get_approvals_history_multiple(
+    client, sample_client_data, sample_proposal_data, creator_headers, approver_1_headers, approver_2_headers
+):
     """Historial acumula aprobaciones de reviewer y VP."""
-    pid = _create_proposal(client, sample_client_data, sample_proposal_data)
-    _advance_to_approved(client, pid)  # 2 aprobaciones: reviewer + VP
+    pid = _create_proposal(client, sample_client_data, sample_proposal_data, creator_headers)
+    _advance_to_approved(client, pid, approver_1_headers, approver_2_headers)  # 2 aprobaciones: reviewer + VP
 
     res = client.get(f"/api/proposals/{pid}/approvals")
     assert res.status_code == status.HTTP_200_OK
@@ -185,13 +201,15 @@ def test_get_approvals_history_multiple(client, sample_client_data, sample_propo
 
 
 # ── Test de transición inválida (409) ────────────────────────────────────────
-def test_approve_with_wrong_role_returns_409(client, sample_client_data, sample_proposal_data):
+def test_approve_with_wrong_role_returns_409(
+    client, sample_client_data, sample_proposal_data, creator_headers, approver_2_headers
+):
     """Intentar aprobar con el rol incorrecto devuelve 409 Conflict."""
-    pid = _create_proposal(client, sample_client_data, sample_proposal_data)
+    pid = _create_proposal(client, sample_client_data, sample_proposal_data, creator_headers)
     _advance_to_pending_review(client, pid)
 
     # VP intenta aprobar una propuesta en PENDING_REVIEW (solo el reviewer puede)
-    res = client.post(f"/api/proposals/{pid}/approve", json={
+    res = client.post(f"/api/proposals/{pid}/approve", headers=approver_2_headers, json={
         "role": "vp",
         "approver_name": "Juan Pablo",
         "approver_email": "jp@innti.com",

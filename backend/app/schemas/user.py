@@ -17,7 +17,13 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     """Esquema para creación de usuario."""
-    pass
+    password: str
+
+
+class UserLogin(BaseModel):
+    """Esquema para login de usuario."""
+    email: EmailStr
+    password: str
 
 
 class UserUpdate(BaseModel):

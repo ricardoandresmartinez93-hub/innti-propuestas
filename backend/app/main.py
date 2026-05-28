@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.database import init_db
-from app.routers import portfolio, proposals, approvals, documents, clients, users
+from app.routers import portfolio, proposals, approvals, documents, clients, users, auth
 from app.middleware.error_handler import register_error_handlers
 
 settings = get_settings()
@@ -55,6 +55,7 @@ app.include_router(approvals.router)
 app.include_router(documents.router)
 app.include_router(clients.router)
 app.include_router(users.router)
+app.include_router(auth.router)
 
 
 @app.get("/", tags=["Health"])

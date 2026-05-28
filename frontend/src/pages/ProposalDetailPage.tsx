@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { proposalApi } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
 import {
   Proposal,
   STATUS_LABELS,
@@ -13,6 +14,7 @@ import {
 import ProposalEditor, { type ProposalEditorHandle } from '../components/ProposalEditor'
 
 const ProposalDetailPage: React.FC = () => {
+  const { user } = useAuth()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const editorRef = useRef<ProposalEditorHandle>(null)
@@ -268,10 +270,11 @@ const ProposalDetailPage: React.FC = () => {
   }
 
   const renderActionButtons = () => {
-    if (!proposal) return null
+    if (!proposal || !user) return null
 
     switch (proposal.status) {
       case 'draft':
+        if (user.role !== 'creator') return null
         return (
           <button
             onClick={handleSubmitForReview}
@@ -282,6 +285,7 @@ const ProposalDetailPage: React.FC = () => {
           </button>
         )
       case 'pending_review':
+        if (user.role !== 'approver_1') return null
         return (
           <div className="flex space-x-3">
             <button
@@ -301,6 +305,7 @@ const ProposalDetailPage: React.FC = () => {
           </div>
         )
       case 'reviewed':
+        if (user.role !== 'creator') return null
         return (
           <button
             onClick={handleSubmitForReview}
@@ -311,6 +316,7 @@ const ProposalDetailPage: React.FC = () => {
           </button>
         )
       case 'pending_vp':
+        if (user.role !== 'approver_2') return null
         return (
           <div className="flex space-x-3">
             <button
@@ -330,6 +336,7 @@ const ProposalDetailPage: React.FC = () => {
           </div>
         )
       case 'approved':
+        if (user.role !== 'creator') return null
         return (
           <button
             onClick={handleSubmitForReview}
@@ -340,6 +347,7 @@ const ProposalDetailPage: React.FC = () => {
           </button>
         )
       case 'rejected':
+        if (user.role !== 'creator') return null
         return (
           <button
             onClick={handleSubmitForReview}
@@ -450,7 +458,7 @@ const ProposalDetailPage: React.FC = () => {
           <div className="bg-white p-4 rounded-lg shadow border">
             <h3 className="font-semibold text-gray-900 mb-4">Acciones de Documento</h3>
             <div className="space-y-2">
-              {proposal.status === 'draft' && (
+              {proposal.status === 'draft' && (user?.role === 'creator' || user?.role === 'approver_1') && (
                 <>
                   <button
                     onClick={handleGenerateWithInnti}

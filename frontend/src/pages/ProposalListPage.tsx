@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { proposalApi } from '../services/api'
 import { STATUS_LABELS } from '../types'
 import type { Proposal, ProposalStatus } from '../types'
+import { useAuth } from '../contexts/AuthContext'
 
 const STATUS_COLORS: Record<ProposalStatus, string> = {
   draft: 'bg-gray-100 text-gray-800',
@@ -15,6 +16,7 @@ const STATUS_COLORS: Record<ProposalStatus, string> = {
 }
 
 export default function ProposalListPage() {
+  const { user } = useAuth()
   const [proposals, setProposals] = useState<Proposal[]>([])
   const [loading, setLoading] = useState(true)
   const [confirmDelete, setConfirmDelete] = useState<{ id: number; title: string } | null>(null)
@@ -103,8 +105,8 @@ export default function ProposalListPage() {
                         className="text-xs px-3 py-1.5 rounded-md bg-primary-50 text-primary-700 hover:bg-primary-100 font-medium"
                       >
                         Editar
-                      </Link>
-                      {p.status === 'draft' && (
+                        </Link>
+                      {p.status === 'draft' && user?.role === 'creator' && (
                         <button
                           onClick={() => setConfirmDelete({ id: p.id, title: p.title })}
                           data-testid={`delete-btn-${p.id}`}

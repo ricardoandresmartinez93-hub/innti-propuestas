@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from app.database import get_db
+from app.models.user import User, UserRole
+from app.auth import require_approver_any
 from app.models.proposal import Proposal, ProposalStatus
 from app.models.approval import Approval
 from app.schemas.proposal import ApprovalCreate, ApprovalRead
@@ -63,8 +65,15 @@ def approve_proposal(
     data: ApprovalCreate,
     db: Session = Depends(get_db),
     service: ApprovalService = Depends(get_approval_service),
+    current_user: User = Depends(require_approver_any),
 ):
     """Aprueba una propuesta (según rol: reviewer o VP)."""
+    # Verificar que el rol en el body coincida con el rol del usuario logueado
+    if data.role == "reviewer" and current_user.role != UserRole.approver_1:
+        raise HTTPException(status_code=403, detail="Solo approver_1 puede aprobar como reviewer")
+    if data.role == "vp" and current_user.role != UserRole.approver_2:
+        raise HTTPException(status_code=403, detail="Solo approver_2 puede aprobar como vp")
+    
     try:
         proposal = service.approve(
             db=db,
@@ -94,8 +103,15 @@ def reject_proposal(
     data: ApprovalCreate,
     db: Session = Depends(get_db),
     service: ApprovalService = Depends(get_approval_service),
+    current_user: User = Depends(require_approver_any),
 ):
     """Rechaza una propuesta."""
+    # Verificar que el rol en el body coincida con el rol del usuario logueado
+    if data.role == "reviewer" and current_user.role != UserRole.approver_1:
+        raise HTTPException(status_code=403, detail="Solo approver_1 puede rechazar como reviewer")
+    if data.role == "vp" and current_user.role != UserRole.approver_2:
+        raise HTTPException(status_code=403, detail="Solo approver_2 puede rechazar como vp")
+        
     try:
         proposal = service.reject(
             db=db,

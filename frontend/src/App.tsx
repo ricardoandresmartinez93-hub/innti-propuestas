@@ -4,17 +4,23 @@ import HomePage from './pages/HomePage'
 import NewProposalPage from './pages/NewProposalPage'
 import ProposalListPage from './pages/ProposalListPage'
 import ProposalDetailPage from './pages/ProposalDetailPage'
+import LoginPage from './pages/LoginPage'
+import ProtectedRoute from './components/ProtectedRoute'
+import { AuthProvider } from './contexts/AuthContext'
 
 function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Layout />}>
-        <Route index element={<HomePage />} />
-        <Route path="proposals" element={<ProposalListPage />} />
-        <Route path="proposals/new" element={<NewProposalPage />} />
-        <Route path="proposals/:id" element={<ProposalDetailPage />} />
-      </Route>
-    </Routes>
+    <AuthProvider>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+          <Route index element={<HomePage />} />
+          <Route path="proposals" element={<ProposalListPage />} />
+          <Route path="proposals/new" element={<ProtectedRoute allowedRoles={['creator']}><NewProposalPage /></ProtectedRoute>} />
+          <Route path="proposals/:id" element={<ProposalDetailPage />} />
+        </Route>
+      </Routes>
+    </AuthProvider>
   )
 }
 

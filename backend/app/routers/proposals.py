@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from app.database import get_db
+from app.models.user import User
+from app.auth import require_creator
 from app.models.proposal import (
     Proposal, ProposalProduct, ProposalScheme, ProposalStatus, SchemeType, MVP_SCHEME_TYPES
 )
@@ -18,7 +20,7 @@ router = APIRouter(prefix="/api/proposals", tags=["Propuestas"])
 
 
 @router.post("/", response_model=ProposalRead, status_code=status.HTTP_201_CREATED)
-def create_proposal(data: ProposalCreate, db: Session = Depends(get_db)):
+def create_proposal(data: ProposalCreate, db: Session = Depends(get_db), current_user: User = Depends(require_creator)):
     """Crea una nueva propuesta comercial."""
     # Validar esquemas MVP
     for scheme in data.schemes:
@@ -120,7 +122,7 @@ def update_proposal(
 
 
 @router.delete("/{proposal_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_proposal(proposal_id: int, db: Session = Depends(get_db)):
+def delete_proposal(proposal_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_creator)):
     """Elimina una propuesta."""
     proposal = db.query(Proposal).filter(Proposal.id == proposal_id).first()
     if not proposal:

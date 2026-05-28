@@ -11,7 +11,22 @@ import '@testing-library/jest-dom/vitest'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import ProposalDetailPage from '../pages/ProposalDetailPage'
 import { proposalApi } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
 import type { Proposal, Approval } from '../types'
+
+vi.mock('../contexts/AuthContext', () => ({
+  useAuth: vi.fn(),
+}))
+
+const mockUser = (role: 'creator' | 'approver_1' | 'approver_2' | 'viewer') => {
+  vi.mocked(useAuth).mockReturnValue({
+    user: { id: 1, email: 'test@test.com', full_name: 'Test User', role },
+    token: 'mock-token',
+    login: vi.fn(),
+    logout: vi.fn(),
+    isLoading: false,
+  })
+}
 
 // Mock de proposalApi
 vi.mock('../services/api', () => ({
@@ -59,12 +74,13 @@ const renderWithRouter = () => {
 describe('ProposalDetailPage Approval Flow', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockUser('creator')
     vi.mocked(proposalApi.getApprovals).mockResolvedValue({ data: [] } as any)
   })
 
   it('shows "Enviar a Revisión" button when status is draft', async () => {
     vi.mocked(proposalApi.get).mockResolvedValue({ data: { ...mockProposal, status: 'draft' } } as any)
-    
+
     renderWithRouter()
 
     await waitFor(() => {
@@ -73,8 +89,9 @@ describe('ProposalDetailPage Approval Flow', () => {
   })
 
   it('shows approval/rejection buttons for Angela when status is pending_review', async () => {
+    mockUser('approver_1')
     vi.mocked(proposalApi.get).mockResolvedValue({ data: { ...mockProposal, status: 'pending_review' } } as any)
-    
+
     renderWithRouter()
 
     await waitFor(() => {
@@ -85,7 +102,7 @@ describe('ProposalDetailPage Approval Flow', () => {
 
   it('shows "Enviar a VP" button when status is reviewed', async () => {
     vi.mocked(proposalApi.get).mockResolvedValue({ data: { ...mockProposal, status: 'reviewed' } } as any)
-    
+
     renderWithRouter()
 
     await waitFor(() => {
@@ -94,8 +111,9 @@ describe('ProposalDetailPage Approval Flow', () => {
   })
 
   it('shows approval/rejection buttons for VP when status is pending_vp', async () => {
+    mockUser('approver_2')
     vi.mocked(proposalApi.get).mockResolvedValue({ data: { ...mockProposal, status: 'pending_vp' } } as any)
-    
+
     renderWithRouter()
 
     await waitFor(() => {
@@ -106,7 +124,7 @@ describe('ProposalDetailPage Approval Flow', () => {
 
   it('shows "Marcar como Enviada al Cliente" button when status is approved', async () => {
     vi.mocked(proposalApi.get).mockResolvedValue({ data: { ...mockProposal, status: 'approved' } } as any)
-    
+
     renderWithRouter()
 
     await waitFor(() => {
@@ -115,8 +133,9 @@ describe('ProposalDetailPage Approval Flow', () => {
   })
 
   it('opens rejection modal with comments field when clicking "Rechazar"', async () => {
+    mockUser('approver_1')
     vi.mocked(proposalApi.get).mockResolvedValue({ data: { ...mockProposal, status: 'pending_review' } } as any)
-    
+
     renderWithRouter()
 
     await waitFor(() => {
@@ -157,6 +176,7 @@ describe('ProposalDetailPage — descarga de documentos', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mockUser('creator')
     vi.mocked(proposalApi.getApprovals).mockResolvedValue({ data: [] } as any)
 
     createObjectURL = vi.fn(() => 'blob:mock')

@@ -24,18 +24,18 @@ DOCX_MEDIA_TYPE = (
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-def _create_proposal(client, sample_client_data, sample_proposal_data) -> int:
+def _create_proposal(client, sample_client_data, sample_proposal_data, creator_headers) -> int:
     c_res = client.post("/api/clients/", json=sample_client_data)
     assert c_res.status_code == status.HTTP_201_CREATED
     client_id = c_res.json()["id"]
 
     p_data = {**sample_proposal_data, "client_id": client_id}
-    p_res = client.post("/api/proposals/", json=p_data)
+    p_res = client.post("/api/proposals/", json=p_data, headers=creator_headers)
     assert p_res.status_code == status.HTTP_201_CREATED
     return p_res.json()["id"]
 
 
-def _create_multi_scheme_proposal(client, sample_client_data) -> int:
+def _create_multi_scheme_proposal(client, sample_client_data, creator_headers) -> int:
     """Crea una propuesta con dos esquemas y combine_schemes=False."""
     c_res = client.post("/api/clients/", json=sample_client_data)
     assert c_res.status_code == status.HTTP_201_CREATED
@@ -52,7 +52,7 @@ def _create_multi_scheme_proposal(client, sample_client_data) -> int:
             {"scheme_type": "services", "payment_frequency": "mensual"},
         ],
     }
-    p_res = client.post("/api/proposals/", json=p_data)
+    p_res = client.post("/api/proposals/", json=p_data, headers=creator_headers)
     assert p_res.status_code == status.HTTP_201_CREATED
     return p_res.json()["id"]
 
@@ -64,13 +64,13 @@ def test_generate_document_not_found(client):
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
-def test_generate_document_success(client, sample_client_data, sample_proposal_data):
+def test_generate_document_success(client, creator_headers, sample_client_data, sample_proposal_data):
     """
     Genera documento Word correctamente.
     Se parchea PortfolioService para devolver lista vacía de productos.
     El DocumentGenerator genera un .docx real con python-docx.
     """
-    pid = _create_proposal(client, sample_client_data, sample_proposal_data)
+    pid = _create_proposal(client, sample_client_data, sample_proposal_data, creator_headers)
 
     with patch("app.routers.documents.PortfolioService") as MockPortfolio:
         MockPortfolio.return_value.get_by_names.return_value = []
@@ -91,12 +91,12 @@ def test_generate_pdf_not_found(client):
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
-def test_generate_pdf_conversion_error_returns_500(client, sample_client_data, sample_proposal_data):
+def test_generate_pdf_conversion_error_returns_500(client, creator_headers, sample_client_data, sample_proposal_data):
     """
     Si convert_docx_to_pdf lanza una excepción, el endpoint devuelve 500
     con el mensaje 'No se pudo generar el PDF'.
     """
-    pid = _create_proposal(client, sample_client_data, sample_proposal_data)
+    pid = _create_proposal(client, sample_client_data, sample_proposal_data, creator_headers)
 
     # Crear un archivo .docx falso para que _build_proposal_docx lo devuelva
     tmpdir = Path(tempfile.gettempdir()) / "innti_docs"
@@ -119,12 +119,12 @@ def test_generate_pdf_conversion_error_returns_500(client, sample_client_data, s
 
 
 # ── Tests: documentos separados (combine_schemes=False) ──────────────────────
-def test_generate_document_separate_returns_zip(client, sample_client_data):
+def test_generate_document_separate_returns_zip(client, creator_headers, sample_client_data):
     """
     Con combine_schemes=False y 2 esquemas, generate-document devuelve un ZIP
     que contiene un .docx por esquema.
     """
-    pid = _create_multi_scheme_proposal(client, sample_client_data)
+    pid = _create_multi_scheme_proposal(client, sample_client_data, creator_headers)
 
     with patch("app.routers.documents.PortfolioService") as MockPortfolio:
         MockPortfolio.return_value.get_by_names.return_value = []
@@ -143,12 +143,12 @@ def test_generate_document_separate_returns_zip(client, sample_client_data):
     assert any("servicios" in n for n in names)
 
 
-def test_generate_pdf_separate_returns_zip(client, sample_client_data):
+def test_generate_pdf_separate_returns_zip(client, creator_headers, sample_client_data):
     """
     Con combine_schemes=False y 2 esquemas, generate-pdf devuelve un ZIP
     con un .pdf por esquema (convert_docx_to_pdf se parchea para crear el .pdf vacío).
     """
-    pid = _create_multi_scheme_proposal(client, sample_client_data)
+    pid = _create_multi_scheme_proposal(client, sample_client_data, creator_headers)
 
     def fake_convert(docx_path: str, pdf_path: str) -> None:
         Path(pdf_path).write_bytes(b"%PDF-1.4")
@@ -175,7 +175,7 @@ def test_generate_pdf_separate_returns_zip(client, sample_client_data):
 
 
 def test_generate_document_separate_single_scheme_returns_docx(
-    client, sample_client_data, sample_proposal_data
+    client, creator_headers, sample_client_data, sample_proposal_data
 ):
     """
     Con combine_schemes=False pero solo 1 esquema, devuelve un .docx único (no ZIP).
@@ -188,7 +188,7 @@ def test_generate_document_separate_single_scheme_returns_docx(
         "combine_schemes": False,
         "schemes": [{"scheme_type": "licensing", "payment_frequency": "unico"}],
     }
-    p_res = client.post("/api/proposals/", json=p_data)
+    p_res = client.post("/api/proposals/", json=p_data, headers=creator_headers)
     pid = p_res.json()["id"]
 
     with patch("app.routers.documents.PortfolioService") as MockPortfolio:
@@ -202,13 +202,13 @@ def test_generate_document_separate_single_scheme_returns_docx(
     assert "wordprocessingml" in response.headers["content-type"]
 
 
-def test_generate_document_separate_innti_per_scheme(client, sample_client_data):
+def test_generate_document_separate_innti_per_scheme(client, creator_headers, sample_client_data):
     """
     Con combine_schemes=False y use_innti=True, las secciones de forma de pago y
     condiciones económicas se generan con el tipo de esquema individual (no combinado).
     Cada documento debe recibir el contenido de pago correspondiente a su esquema.
     """
-    pid = _create_multi_scheme_proposal(client, sample_client_data)
+    pid = _create_multi_scheme_proposal(client, sample_client_data, creator_headers)
 
     with patch("app.routers.documents.PortfolioService") as MockPortfolio:
         MockPortfolio.return_value.get_by_names.return_value = []
@@ -261,12 +261,12 @@ def test_generate_annex_not_found(client):
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
-def test_generate_annex_success(client, sample_client_data, sample_proposal_data):
+def test_generate_annex_success(client, creator_headers, sample_client_data, sample_proposal_data):
     """
     Genera el anexo técnico correctamente.
     Se parchea PortfolioService; DocumentGenerator se ejecuta con python-docx.
     """
-    pid = _create_proposal(client, sample_client_data, sample_proposal_data)
+    pid = _create_proposal(client, sample_client_data, sample_proposal_data, creator_headers)
 
     with patch("app.routers.documents.PortfolioService") as MockPortfolio:
         MockPortfolio.return_value.get_by_names.return_value = []
@@ -279,13 +279,13 @@ def test_generate_annex_success(client, sample_client_data, sample_proposal_data
 
 # ── Tests: resiliencia ante fallos parciales de Innti ─────────────────────────
 def test_generate_document_innti_cover_letter_failure_uses_fallback(
-    client, sample_client_data, sample_proposal_data
+    client, creator_headers, sample_client_data, sample_proposal_data
 ):
     """
     Cuando generate_cover_letter lanza InntiServiceError se usa el template
     de respaldo: letter_content queda NO vacío y las demás secciones se persisten.
     """
-    pid = _create_proposal(client, sample_client_data, sample_proposal_data)
+    pid = _create_proposal(client, sample_client_data, sample_proposal_data, creator_headers)
 
     with patch("app.routers.documents.PortfolioService") as MockPortfolio:
         MockPortfolio.return_value.get_by_names.return_value = []
@@ -327,13 +327,13 @@ def test_generate_document_innti_cover_letter_failure_uses_fallback(
 
 
 def test_generate_document_innti_cover_letter_empty_uses_fallback(
-    client, sample_client_data, sample_proposal_data
+    client, creator_headers, sample_client_data, sample_proposal_data
 ):
     """
     Cuando generate_cover_letter devuelve string vacío (sin excepción)
     se usa igualmente el template de respaldo.
     """
-    pid = _create_proposal(client, sample_client_data, sample_proposal_data)
+    pid = _create_proposal(client, sample_client_data, sample_proposal_data, creator_headers)
 
     with patch("app.routers.documents.PortfolioService") as MockPortfolio:
         MockPortfolio.return_value.get_by_names.return_value = []
@@ -366,13 +366,13 @@ def test_generate_document_innti_cover_letter_empty_uses_fallback(
 
 
 def test_generate_document_innti_all_sections_persisted(
-    client, sample_client_data, sample_proposal_data
+    client, creator_headers, sample_client_data, sample_proposal_data
 ):
     """
     Cuando todas las llamadas Innti tienen éxito, TODAS las secciones
     (incluida letter_content) se persisten en la BD.
     """
-    pid = _create_proposal(client, sample_client_data, sample_proposal_data)
+    pid = _create_proposal(client, sample_client_data, sample_proposal_data, creator_headers)
 
     with patch("app.routers.documents.PortfolioService") as MockPortfolio:
         MockPortfolio.return_value.get_by_names.return_value = []
