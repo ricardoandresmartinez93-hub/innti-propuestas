@@ -3,7 +3,7 @@ import { Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
 interface ProtectedRouteProps {
-  allowedRoles?: Array<'creator' | 'approver_1' | 'approver_2' | 'viewer'>
+  allowedRoles?: Array<'admin' | 'creator' | 'approver_1' | 'approver_2' | 'viewer'>
   children?: React.ReactNode
 }
 

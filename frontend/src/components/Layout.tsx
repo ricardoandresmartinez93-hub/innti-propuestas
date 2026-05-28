@@ -13,6 +13,7 @@ export default function Layout() {
 
   const getRoleBadge = (role: string) => {
     switch (role) {
+      case 'admin': return { label: 'Administrador', color: 'bg-red-700' }
       case 'creator': return { label: 'Creador', color: 'bg-green-600' }
       case 'approver_1': return { label: 'Ángela', color: 'bg-purple-600' }
       case 'approver_2': return { label: 'Juan Pablo VP', color: 'bg-orange-600' }
@@ -30,6 +31,10 @@ export default function Layout() {
 
   if (user?.role === 'creator') {
     navItems.push({ path: '/proposals/new', label: 'Nueva Propuesta' })
+  }
+
+  if (user?.role === 'admin') {
+    navItems.push({ path: '/admin', label: 'Usuarios' })
   }
 
   return (

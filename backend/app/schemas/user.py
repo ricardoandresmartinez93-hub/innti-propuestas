@@ -32,6 +32,7 @@ class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     role: Optional[UserRole] = None
     is_active: Optional[bool] = None
+    new_password: Optional[str] = None
 
 
 class UserRead(UserBase):

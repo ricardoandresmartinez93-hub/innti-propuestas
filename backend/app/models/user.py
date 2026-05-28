@@ -13,6 +13,7 @@ class UserRole(str, enum.Enum):
     Roles de usuario definidos para el sistema.
     Los roles son configurables y no están limitados a personas específicas.
     """
+    admin = "admin"
     creator = "creator"
     approver_1 = "approver_1"
     approver_2 = "approver_2"
@@ -29,7 +30,8 @@ class User(Base):
     full_name = Column(String(200), nullable=False)
     email = Column(String(200), unique=True, index=True, nullable=False)
     hashed_password = Column(String(200), nullable=True, comment="Contraseña hasheada con bcrypt")
-    role = Column(Enum(UserRole), default=UserRole.creator, nullable=False)
+    # create_constraint=False evita CHECK constraint en SQLite para permitir nuevos valores de enum
+    role = Column(Enum(UserRole, create_constraint=False), default=UserRole.creator, nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),

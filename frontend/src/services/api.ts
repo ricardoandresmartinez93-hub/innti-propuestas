@@ -11,6 +11,10 @@ import type {
   Approval,
   ApproveRequest,
   RejectRequest,
+  AppUser,
+  UserCreate,
+  UserUpdate,
+  UserRole,
 } from '../types'
 
 const api = axios.create({
@@ -90,6 +94,24 @@ export const proposalApi = {
       responseType: 'blob',
       timeout: 120_000,
     }),
+}
+
+// --- Usuarios (solo admin) ---
+export const userApi = {
+  list: (role?: UserRole, includeInactive = false) =>
+    api.get<AppUser[]>('/users/', { params: { role, include_inactive: includeInactive } }),
+
+  get: (id: number) =>
+    api.get<AppUser>(`/users/${id}`),
+
+  create: (data: UserCreate) =>
+    api.post<AppUser>('/users/', data),
+
+  update: (id: number, data: UserUpdate) =>
+    api.put<AppUser>(`/users/${id}`, data),
+
+  deactivate: (id: number) =>
+    api.delete(`/users/${id}`),
 }
 
 // --- Clientes ---

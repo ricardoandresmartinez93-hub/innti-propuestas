@@ -5,7 +5,7 @@ export interface AuthUser {
   id: number
   email: string
   full_name: string
-  role: 'creator' | 'approver_1' | 'approver_2' | 'viewer'
+  role: 'admin' | 'creator' | 'approver_1' | 'approver_2' | 'viewer'
 }
 
 interface AuthContextValue {

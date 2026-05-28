@@ -5,6 +5,7 @@ import NewProposalPage from './pages/NewProposalPage'
 import ProposalListPage from './pages/ProposalListPage'
 import ProposalDetailPage from './pages/ProposalDetailPage'
 import LoginPage from './pages/LoginPage'
+import AdminPage from './pages/AdminPage'
 import ProtectedRoute from './components/ProtectedRoute'
 import { AuthProvider } from './contexts/AuthContext'
 
@@ -18,6 +19,7 @@ function App() {
           <Route path="proposals" element={<ProposalListPage />} />
           <Route path="proposals/new" element={<ProtectedRoute allowedRoles={['creator']}><NewProposalPage /></ProtectedRoute>} />
           <Route path="proposals/:id" element={<ProposalDetailPage />} />
+          <Route path="admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminPage /></ProtectedRoute>} />
         </Route>
       </Routes>
     </AuthProvider>

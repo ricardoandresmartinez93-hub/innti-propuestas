@@ -153,3 +153,39 @@ export const ROLE_LABELS: Record<ApprovalRole, string> = {
   reviewer: 'Revisora (Ángela)',
   vp: 'VP (Juan Pablo)',
 }
+
+// --- Usuarios ---
+export type UserRole = 'admin' | 'creator' | 'approver_1' | 'approver_2' | 'viewer'
+
+export const USER_ROLE_LABELS: Record<UserRole, string> = {
+  admin: 'Administrador',
+  creator: 'Creador',
+  approver_1: 'Revisora',
+  approver_2: 'VP',
+  viewer: 'Visor',
+}
+
+export interface AppUser {
+  id: number
+  full_name: string
+  email: string
+  role: UserRole
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface UserCreate {
+  full_name: string
+  email: string
+  role: UserRole
+  password: string
+}
+
+export interface UserUpdate {
+  full_name?: string
+  email?: string
+  role?: UserRole
+  is_active?: boolean
+  new_password?: string
+}

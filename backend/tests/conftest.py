@@ -101,6 +101,22 @@ def approver_2_headers(db_session: Session):
 
 
 @pytest.fixture
+def admin_headers(db_session: Session):
+    """Crea un usuario admin y retorna las cabeceras de autorización JWT."""
+    user = User(
+        full_name="Administrador Test",
+        email="admin@test.com",
+        hashed_password=get_password_hash("adminpass"),
+        role=UserRole.admin,
+        is_active=True,
+    )
+    db_session.add(user)
+    db_session.commit()
+    token = create_access_token({"sub": user.email, "user_id": user.id, "role": user.role})
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
 def sample_client_data():
     """Datos de ejemplo para un cliente."""
     return {

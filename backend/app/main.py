@@ -7,9 +7,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.database import init_db
+from app.database import init_db, SessionLocal
 from app.routers import portfolio, proposals, approvals, documents, clients, users, auth
 from app.middleware.error_handler import register_error_handlers
+from app.seed import seed_admin
 
 settings = get_settings()
 
@@ -23,6 +24,11 @@ async def lifespan(app: FastAPI):
     """
     # Startup
     init_db()
+    db = SessionLocal()
+    try:
+        seed_admin(db)
+    finally:
+        db.close()
     yield
     # Shutdown (si fuera necesario limpiar recursos)
 

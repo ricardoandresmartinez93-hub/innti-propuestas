@@ -74,3 +74,8 @@ def require_approver_any(current_user: User = Depends(get_current_user)) -> User
     if current_user.role not in [UserRole.approver_1, UserRole.approver_2]:
         raise HTTPException(status_code=403, detail="Se requiere rol de aprobador")
     return current_user
+
+def require_admin(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role != UserRole.admin:
+        raise HTTPException(status_code=403, detail="Se requiere rol administrador")
+    return current_user
