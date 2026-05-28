@@ -128,6 +128,11 @@ def delete_proposal(proposal_id: int, db: Session = Depends(get_db)):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Propuesta {proposal_id} no encontrada",
         )
+    if proposal.status != ProposalStatus.DRAFT:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Solo se pueden eliminar propuestas en estado DRAFT. Estado actual: {proposal.status}",
+        )
     db.delete(proposal)
     db.commit()
 

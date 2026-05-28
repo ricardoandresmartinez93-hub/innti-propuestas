@@ -17,6 +17,9 @@ const STATUS_COLORS: Record<ProposalStatus, string> = {
 export default function ProposalListPage() {
   const [proposals, setProposals] = useState<Proposal[]>([])
   const [loading, setLoading] = useState(true)
+  const [confirmDelete, setConfirmDelete] = useState<{ id: number; title: string } | null>(null)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   useEffect(() => {
     proposalApi.list()
@@ -24,6 +27,26 @@ export default function ProposalListPage() {
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [])
+
+  const handleDelete = async () => {
+    if (!confirmDelete) return
+    setDeletingId(confirmDelete.id)
+    setDeleteError(null)
+    try {
+      await proposalApi.delete(confirmDelete.id)
+      setProposals((prev) => prev.filter((p) => p.id !== confirmDelete.id))
+      setConfirmDelete(null)
+    } catch {
+      setDeleteError('No se pudo eliminar la propuesta. Inténtalo de nuevo.')
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  const handleCancelDelete = () => {
+    setConfirmDelete(null)
+    setDeleteError(null)
+  }
 
   if (loading) {
     return <div className="text-center py-8 text-gray-500">Cargando propuestas...</div>
@@ -57,6 +80,7 @@ export default function ProposalListPage() {
                 <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Título</th>
                 <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Estado</th>
                 <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Fecha</th>
+                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -72,10 +96,62 @@ export default function ProposalListPage() {
                   <td className="px-4 py-3 text-sm text-gray-500">
                     {new Date(p.updated_at).toLocaleDateString('es-CO')}
                   </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <Link
+                        to={`/proposals/${p.id}`}
+                        className="text-xs px-3 py-1.5 rounded-md bg-primary-50 text-primary-700 hover:bg-primary-100 font-medium"
+                      >
+                        Editar
+                      </Link>
+                      {p.status === 'draft' && (
+                        <button
+                          onClick={() => setConfirmDelete({ id: p.id, title: p.title })}
+                          data-testid={`delete-btn-${p.id}`}
+                          className="text-xs px-3 py-1.5 rounded-md bg-red-50 text-red-700 hover:bg-red-100 font-medium"
+                        >
+                          Eliminar
+                        </button>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {confirmDelete !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Eliminar propuesta</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              ¿Eliminar{' '}
+              <span className="font-semibold">"{confirmDelete.title}"</span>?{' '}
+              Esta acción no se puede deshacer.
+            </p>
+            {deleteError !== null && (
+              <p className="text-sm text-red-600 mb-3">{deleteError}</p>
+            )}
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={handleCancelDelete}
+                disabled={deletingId !== null}
+                className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deletingId !== null}
+                data-testid="confirm-delete-btn"
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                {deletingId !== null ? 'Eliminando...' : 'Eliminar'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

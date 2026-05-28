@@ -79,6 +79,40 @@ def test_delete_proposal(client, sample_client_data, sample_proposal_data):
     get_res = client.get(f"/api/proposals/{proposal_id}")
     assert get_res.status_code == status.HTTP_404_NOT_FOUND
 
+def test_delete_proposal_draft_success(client, sample_client_data, sample_proposal_data):
+    """DELETE exitoso cuando la propuesta está en DRAFT."""
+    client_res = client.post("/api/clients/", json=sample_client_data)
+    client_id = client_res.json()["id"]
+    proposal_data = sample_proposal_data.copy()
+    proposal_data["client_id"] = client_id
+    prop_res = client.post("/api/proposals/", json=proposal_data)
+    proposal_id = prop_res.json()["id"]
+    assert prop_res.json()["status"] == "draft"
+
+    response = client.delete(f"/api/proposals/{proposal_id}")
+    assert response.status_code == status.HTTP_204_NO_CONTENT
+
+    get_res = client.get(f"/api/proposals/{proposal_id}")
+    assert get_res.status_code == status.HTTP_404_NOT_FOUND
+
+
+def test_delete_proposal_non_draft_fails(client, sample_client_data, sample_proposal_data):
+    """DELETE rechazado con 409 si la propuesta no está en DRAFT."""
+    client_res = client.post("/api/clients/", json=sample_client_data)
+    client_id = client_res.json()["id"]
+    proposal_data = sample_proposal_data.copy()
+    proposal_data["client_id"] = client_id
+    prop_res = client.post("/api/proposals/", json=proposal_data)
+    proposal_id = prop_res.json()["id"]
+
+    # Avanzar a PENDING_REVIEW
+    client.post(f"/api/proposals/{proposal_id}/submit-review")
+
+    response = client.delete(f"/api/proposals/{proposal_id}")
+    assert response.status_code == status.HTTP_409_CONFLICT
+    assert "DRAFT" in response.json()["detail"]
+
+
 def test_full_approval_flow(client, sample_client_data, sample_proposal_data):
     """Crear -> submit_review -> approve(reviewer) -> approve(VP)."""
     # 1. Crear propuesta
