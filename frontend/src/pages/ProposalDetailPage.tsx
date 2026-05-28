@@ -93,8 +93,11 @@ const ProposalDetailPage: React.FC = () => {
 
       // Usar el Content-Type real de la respuesta para detectar si el backend
       // devolvió un ZIP (documentos separados) en lugar de un archivo único.
-      const contentType: string =
+      // response.headers['content-type'] puede ser string | AxiosHeaders | …
+      // String() normaliza cualquier valor al string que necesitamos.
+      const contentType = String(
         response.headers['content-type'] ?? 'application/octet-stream'
+      )
       const isZip = contentType.includes('zip')
       const mimeType = contentType.split(';')[0].trim()
       const extension = isZip ? 'zip' : type === 'pdf' ? 'pdf' : 'docx'

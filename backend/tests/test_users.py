@@ -162,9 +162,11 @@ def test_update_user_password(client, admin_headers):
 
 def test_admin_cannot_deactivate_self(client, admin_headers):
     """El admin no puede desactivar su propia cuenta."""
-    # El admin_headers corresponde al usuario admin@test.com
+    # admin_headers corresponds to admin@test.com; filter by email to get the right admin
     list_resp = client.get("/api/users/?role=admin", headers=admin_headers)
-    admin_id = list_resp.json()[0]["id"]
+    admins = list_resp.json()
+    test_admin = next(u for u in admins if u["email"] == "admin@test.com")
+    admin_id = test_admin["id"]
 
     resp = client.delete(f"/api/users/{admin_id}", headers=admin_headers)
     assert resp.status_code == status.HTTP_400_BAD_REQUEST

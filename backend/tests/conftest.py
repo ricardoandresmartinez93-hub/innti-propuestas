@@ -2,7 +2,7 @@
 Fixtures compartidos para pruebas del backend.
 """
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 import sys
 
 # Mock dependencies that require system libraries
@@ -28,6 +28,7 @@ TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 @pytest.fixture(scope="function")
 def db_session():
     """Crea una sesión de BD limpia para cada test."""
+    Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     session = TestSessionLocal()
     try:
@@ -47,8 +48,9 @@ def client(db_session: Session):
             pass
 
     app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as test_client:
-        yield test_client
+    with patch("app.main.SessionLocal", TestSessionLocal):
+        with TestClient(app) as test_client:
+            yield test_client
     app.dependency_overrides.clear()
 
 

@@ -1,18 +1,17 @@
 /**
  * @vitest-environment jsdom
  */
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
+import React from 'react'
+import { vi, describe, it, expect, beforeEach, afterEach, type Mock } from 'vitest'
 import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react'
-
-// Limpiar el DOM después de cada test — necesario porque @testing-library/react
-// no llama a cleanup automáticamente sin Vitest globals configurados.
-afterEach(cleanup)
 import '@testing-library/jest-dom/vitest'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import ProposalDetailPage from '../pages/ProposalDetailPage'
 import { proposalApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import type { Proposal, Approval } from '../types'
+
+afterEach(cleanup)
 
 vi.mock('../contexts/AuthContext', () => ({
   useAuth: vi.fn(),
@@ -43,9 +42,15 @@ vi.mock('../services/api', () => ({
   },
 }))
 
-// Mock de ProposalEditor para evitar problemas con TipTap en JSDOM
+// Mock de ProposalEditor — usa forwardRef para evitar el warning de React
+// "Function components cannot be given refs", ya que ProposalDetailPage pasa
+// un ref al editor (editorRef: useRef<ProposalEditorHandle>).
 vi.mock('../components/ProposalEditor', () => ({
-  default: () => <div data-testid="proposal-editor">Editor Mock</div>,
+  default: React.forwardRef(
+    (_props: object, _ref: React.Ref<unknown>) => (
+      <div data-testid="proposal-editor">Editor Mock</div>
+    )
+  ),
 }))
 
 const mockProposal: Proposal = {
@@ -172,7 +177,7 @@ describe('ProposalDetailPage Approval Flow', () => {
 })
 
 describe('ProposalDetailPage — descarga de documentos', () => {
-  let createObjectURL: ReturnType<typeof vi.fn>
+  let createObjectURL: Mock
 
   beforeEach(() => {
     vi.clearAllMocks()

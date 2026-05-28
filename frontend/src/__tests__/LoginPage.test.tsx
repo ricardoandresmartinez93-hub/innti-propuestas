@@ -6,7 +6,6 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
 import LoginPage from '../pages/LoginPage'
 import { useAuth } from '../contexts/AuthContext'
-import React from 'react'
 
 vi.mock('../contexts/AuthContext', () => ({
   useAuth: vi.fn(),
