@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from pathlib import Path
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 from app.database import get_db
@@ -98,63 +99,57 @@ def _prepare_proposal_content(
         scheme_type_str = ", ".join(s.scheme_type.value for s in proposal.schemes)
         scheme_label = " / ".join(s.scheme_type.value for s in proposal.schemes)
 
-        try:
-            content["context_text"] = innti.generate_context_section(
-                client.entity, proposal.title
-            )
-        except InntiServiceError as e:
-            log.warning("Innti [context]: %s", e)
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            futures = {
+                "context_text": pool.submit(
+                    innti.generate_context_section, client.entity, proposal.title
+                ),
+                "scope_text": pool.submit(
+                    innti.generate_scope_section, product_names, scheme_type_str
+                ),
+                "letter_text": pool.submit(
+                    innti.generate_cover_letter,
+                    client.name, client.position or "", client.entity, proposal.title,
+                ),
+                "validity_period": pool.submit(
+                    innti.generate_validity_section, scheme_type_str
+                ),
+                "economic_conditions": pool.submit(
+                    innti.generate_economic_conditions_section,
+                    product_names, scheme_type_str, scheme_label,
+                ),
+                "payment_terms": pool.submit(
+                    innti.generate_payment_terms_section, scheme_type_str
+                ),
+                "excluded_services_text": pool.submit(
+                    innti.generate_excluded_services_section
+                ),
+                "ip_section_text": pool.submit(
+                    innti.generate_ip_section, client.entity
+                ),
+            }
 
-        try:
-            content["scope_text"] = innti.generate_scope_section(
-                product_names, scheme_type_str
-            )
-        except InntiServiceError as e:
-            log.warning("Innti [scope]: %s", e)
-
-        try:
-            result = innti.generate_cover_letter(
-                client.name, client.position or "", client.entity, proposal.title
-            )
-            if result:
-                content["letter_text"] = result
-            else:
-                log.warning("Innti [letter]: returned empty — using fallback template")
-                content["letter_text"] = _cover_letter_fallback(
-                    client.name, client.position or "", client.entity, proposal.title
-                )
-        except InntiServiceError as e:
-            log.warning("Innti [letter]: %s — using fallback template", e)
-            content["letter_text"] = _cover_letter_fallback(
-                client.name, client.position or "", client.entity, proposal.title
-            )
-
-        try:
-            content["validity_period"] = innti.generate_validity_section(scheme_type_str)
-        except InntiServiceError as e:
-            log.warning("Innti [validity]: %s", e)
-
-        try:
-            content["economic_conditions"] = innti.generate_economic_conditions_section(
-                product_names, scheme_type_str, scheme_label
-            )
-        except InntiServiceError as e:
-            log.warning("Innti [economic_conditions]: %s", e)
-
-        try:
-            content["payment_terms"] = innti.generate_payment_terms_section(scheme_type_str)
-        except InntiServiceError as e:
-            log.warning("Innti [payment_terms]: %s", e)
-
-        try:
-            content["excluded_services_text"] = innti.generate_excluded_services_section()
-        except InntiServiceError as e:
-            log.warning("Innti [excluded_services]: %s", e)
-
-        try:
-            content["ip_section_text"] = innti.generate_ip_section(client.entity)
-        except InntiServiceError as e:
-            log.warning("Innti [ip_section]: %s", e)
+            for key, future in futures.items():
+                try:
+                    result = future.result()
+                    if key == "letter_text":
+                        if result:
+                            content[key] = result
+                        else:
+                            log.warning("Innti [letter]: returned empty — using fallback template")
+                            content[key] = _cover_letter_fallback(
+                                client.name, client.position or "", client.entity, proposal.title
+                            )
+                    else:
+                        content[key] = result
+                except InntiServiceError as e:
+                    if key == "letter_text":
+                        log.warning("Innti [letter]: %s — using fallback template", e)
+                        content[key] = _cover_letter_fallback(
+                            client.name, client.position or "", client.entity, proposal.title
+                        )
+                    else:
+                        log.warning("Innti [%s]: %s", key, e)
 
         log.info(
             "Innti generation complete — letter=%d chars, context=%d chars",
@@ -294,22 +289,24 @@ def _build_separate_docx_files(
         if use_innti:
             innti = InntiService()
 
-            try:
-                content["validity_period"] = innti.generate_validity_section(scheme_str)
-            except InntiServiceError:
-                pass
-
-            try:
-                content["economic_conditions"] = innti.generate_economic_conditions_section(
-                    product_names, scheme_str, label
-                )
-            except InntiServiceError:
-                pass
-
-            try:
-                content["payment_terms"] = innti.generate_payment_terms_section(scheme_str)
-            except InntiServiceError:
-                pass
+            with ThreadPoolExecutor(max_workers=3) as pool:
+                scheme_futures = {
+                    "validity_period": pool.submit(
+                        innti.generate_validity_section, scheme_str
+                    ),
+                    "economic_conditions": pool.submit(
+                        innti.generate_economic_conditions_section,
+                        product_names, scheme_str, label,
+                    ),
+                    "payment_terms": pool.submit(
+                        innti.generate_payment_terms_section, scheme_str
+                    ),
+                }
+                for key, future in scheme_futures.items():
+                    try:
+                        content[key] = future.result()
+                    except InntiServiceError:
+                        pass
 
         filename = f"propuesta_{proposal_id}_{label}.docx"
         output_path = output_dir / filename

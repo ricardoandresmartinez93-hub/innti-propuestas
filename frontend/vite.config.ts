@@ -15,10 +15,10 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
-        // Timeout generoso para endpoints de generación de documentos
-        // que pueden tardar varios segundos (python-docx + conversión PDF).
-        timeout: 120_000,
-        proxyTimeout: 120_000,
+        // Innti realiza hasta 8 llamadas secuenciales × 30 s/llamada = ~240 s máx.
+        // El timeout debe superar ese valor con margen.
+        timeout: 360_000,
+        proxyTimeout: 360_000,
       },
     },
   },
