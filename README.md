@@ -168,3 +168,19 @@ Esto creará los siguientes usuarios (definidos en [`backend/seed_users.py`](bac
 | Approver 2 | `juanpablo@innti.com` | `Innti2024!` |
 
 > **Nota:** Si el usuario ya existe, el script lo omite sin generar errores.
+
+## 🤖 Configuración de Innti (IA)
+
+Para que el sistema pueda generar propuestas automáticamente, es necesario configurar la conexión con **Innti**. 
+
+Sigue estos pasos:
+
+1. Localiza el archivo `.env` en la carpeta `backend/`.
+2. Asegúrate de tener las siguientes variables configuradas con las credenciales proporcionadas por la empresa:
+
+```dotenv
+# --- Innti (IA Corporativa) ---
+INNTI_API_BASE=https://litellm.quipux.com/v1
+INNTI_API_KEY=tu_clave_aqui
+INNTI_MODEL=innti-dev
+```
