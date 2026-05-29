@@ -14,10 +14,9 @@
 - **Pruebas unitarias obligatorias:** Todo código nuevo — tanto en Backend como en Frontend — **debe** ir acompañado de pruebas unitarias en el mismo PR/commit. No se considera completa ninguna funcionalidad sin su cobertura de tests. Ver sección [Testing](#testing) para las convenciones de cada capa.
 - **Documentación siempre actualizada:** Después de crear o modificar **cualquier** archivo de código, revisar y actualizar la documentación del proyecto para que refleje los cambios. Los archivos a verificar son:
   - `AGENTS.md` — si cambia stack, reglas, convenciones o flujos técnicos
-  - `.claude/agents/*.md` y `.opencode/agents/*.md` — si cambia el comportamiento de un agente
+  - `.opencode/agents/*.md` — si cambia el comportamiento de un agente
   - `.opencode/skills/*.md` — si cambia la API pública de un servicio, estructura de documento, esquemas o terminología
   - `.opencode/ARCHITECTURE.md` — si cambia la arquitectura, número de pestañas del editor, reglas no-obvias del dominio o la matriz de cobertura
-  - `CLAUDE.md` — si se agregan nuevos agents, skills o comandos rápidos
 
 ## Backend (FastAPI)
 - **Modelos vs Schemas:** Separación clara entre modelos de BD (`app/models/`) y schemas Pydantic (`app/schemas/`).

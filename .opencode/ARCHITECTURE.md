@@ -154,13 +154,12 @@ Después de crear o modificar **cualquier archivo**, verificar cuáles de estos 
 | Archivo | Actualizar cuando… |
 |---------|-------------------|
 | `AGENTS.md` | Cambia stack, reglas de desarrollo, convenciones o flujos técnicos |
-| `.claude/agents/*.md` y `.opencode/agents/*.md` | Cambia el comportamiento, prompts o herramientas de un agente |
+| `.opencode/agents/*.md` | Cambia el comportamiento, prompts o herramientas de un agente |
 | `.opencode/skills/document-generation/SKILL.md` | Cambia `DocumentGenerator`: secciones del doc, constantes, endpoints o flujo de generación |
 | `.opencode/skills/innti-domain/SKILL.md` | Cambia esquemas, estados, roles, o métodos de `InntiService` |
 | `.opencode/skills/proposal-workflow-guide/SKILL.md` | Cambia la UI: pestañas del editor, pasos del flujo, botones o campos visibles al usuario |
 | `.opencode/skills/testing-workflow/SKILL.md` | Cambia cómo se ejecutan o estructuran los tests |
 | `.opencode/ARCHITECTURE.md` | Cambia la arquitectura global, reglas no-obvias (#1–#9) o la matriz de cobertura |
-| `CLAUDE.md` | Se agregan nuevos agents, skills o comandos rápidos |
 
 ---
 
