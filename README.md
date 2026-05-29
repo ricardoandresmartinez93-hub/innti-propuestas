@@ -26,16 +26,23 @@ Aplicación web que automatiza la generación de propuestas comerciales, permiti
 ### Backend
 
 ```bash
+#Paso 1
 cd backend
+#Paso 2
+# Editar .env con tus credenciales
+cp .env.example .env
+#Paso 3
 python -m venv .venv
+#Paso 4
 # Windows:
 .venv\Scripts\activate
+.venv\Scripts\pip.exe install uvicorn
 # Linux/Mac:
 source .venv/bin/activate
+#Paso 5
+#Ajustar en la ruta donde se tenga clonado el proyecto
+.venv\Scripts\pip.exe install -r D:\estudio\innti-propuestas\backend\requirements.txt
 
-pip install -r requirements.txt
-cp .env.example .env
-# Editar .env con tus credenciales
 ```
 
 ### Frontend
@@ -131,3 +138,33 @@ Ver `backend/.env.example` para la lista completa de variables requeridas.
 | Soporte y Mantenimiento | Anual |
 | Concesión o BPO | Variable |
 | Suministro | Variable |
+
+## Usuarios Iniciales
+
+### Usuario Administrador
+
+Al arrancar el backend por primera vez, se crea automáticamente un usuario administrador definido en [`backend/app/seed.py`](backend/app/seed.py):
+
+| Campo | Valor |
+|-------|-------|
+| **Email** | `admin@quipux.com` |
+| **Contraseña** | `Admin2024!` |
+
+### Usuarios de Prueba (creator, approver)
+
+Para crear los usuarios operativos del flujo de aprobación, ejecuta el siguiente script **una sola vez** después de levantar el backend:
+
+```bash
+cd backend
+python seed_users.py
+```
+
+Esto creará los siguientes usuarios (definidos en [`backend/seed_users.py`](backend/seed_users.py)):
+
+| Rol | Email | Contraseña |
+|-----|-------|------------|
+| Creator | `creator@innti.com` | `Innti2024!` |
+| Approver 1 | `angela@innti.com` | `Innti2024!` |
+| Approver 2 | `juanpablo@innti.com` | `Innti2024!` |
+
+> **Nota:** Si el usuario ya existe, el script lo omite sin generar errores.
