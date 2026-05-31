@@ -315,3 +315,86 @@ describe('NewProposalPage — Paso 3: selección de cliente', () => {
     expect(getEnabledNextBtn()).toBeUndefined()
   })
 })
+
+// ─── Helper: avanzar hasta el paso 4 ─────────────────────────────────────────
+const navigateToStep4 = async () => {
+  await navigateToStep3()
+
+  // Seleccionar cliente existente
+  await waitFor(() => expect(screen.getByText('Carlos Pérez')).toBeInTheDocument())
+  fireEvent.click(screen.getByText('Carlos Pérez'))
+
+  // Esperar banner verde y avanzar al paso 4
+  await waitFor(() => expect(screen.getByText('Cambiar')).toBeInTheDocument())
+  await waitFor(() => expect(getEnabledNextBtn()).toBeTruthy())
+  fireEvent.click(getEnabledNextBtn()!)
+
+  // Confirmar paso 4
+  await waitFor(() => {
+    expect(screen.getByText('Resumen y Título de la Propuesta')).toBeInTheDocument()
+  })
+}
+
+// ─── Suite: Paso 4 — Código y Título ─────────────────────────────────────────
+describe('NewProposalPage — Paso 4: código y título', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(portfolioApi.listProducts).mockResolvedValue({ data: mockProducts } as any)
+    vi.mocked(clientApi.list).mockResolvedValue({ data: mockClients } as any)
+  })
+
+  // ── 14. Campo "Código" visible en el paso 4 ─────────────────────────────────
+  it('muestra el campo "Código de Propuesta" al llegar al paso 4', async () => {
+    renderPage()
+    await navigateToStep4()
+
+    expect(screen.getByText('Código de Propuesta *')).toBeInTheDocument()
+    expect(screen.getByText('Título de la Propuesta *')).toBeInTheDocument()
+  })
+
+  // ── 15. "Crear Propuesta" deshabilitado sin código ──────────────────────────
+  it('"Crear Propuesta" está deshabilitado cuando el campo código está vacío', async () => {
+    renderPage()
+    await navigateToStep4()
+
+    // Escribir solo el título, dejar código vacío
+    fireEvent.change(
+      screen.getByPlaceholderText(/Propuesta Modernización/i),
+      { target: { value: 'Propuesta Test' } }
+    )
+
+    const createBtn = screen.getByText('Crear Propuesta')
+    expect(createBtn).toBeDisabled()
+  })
+
+  // ── 16. Crear propuesta con código ─────────────────────────────────────────
+  it('llama a proposalApi.create con el código ingresado', async () => {
+    const { proposalApi } = await import('../services/api')
+    vi.mocked(proposalApi.create).mockResolvedValue({ data: { id: 1 } } as any)
+
+    renderPage()
+    await navigateToStep4()
+
+    fireEvent.change(
+      screen.getByPlaceholderText(/Ej: 3018-/i),
+      { target: { value: '3018-0526' } }
+    )
+    fireEvent.change(
+      screen.getByPlaceholderText(/Propuesta Modernización/i),
+      { target: { value: 'Propuesta Test' } }
+    )
+
+    await waitFor(() => {
+      const createBtn = screen.getByText('Crear Propuesta')
+      expect(createBtn).not.toBeDisabled()
+    })
+
+    fireEvent.click(screen.getByText('Crear Propuesta'))
+
+    await waitFor(() => {
+      expect(proposalApi.create).toHaveBeenCalledWith(
+        expect.objectContaining({ code: '3018-0526' })
+      )
+    })
+  })
+})

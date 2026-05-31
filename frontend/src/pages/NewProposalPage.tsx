@@ -22,6 +22,7 @@ export default function NewProposalPage() {
   
   const [client, setClient] = useState<Client | null>(null)
   const [proposalTitle, setProposalTitle] = useState('')
+  const [proposalCode, setProposalCode] = useState('')
 
   const [clientMode, setClientMode] = useState<'select' | 'create'>('select')
   const [existingClients, setExistingClients] = useState<Client[]>([])
@@ -53,13 +54,21 @@ export default function NewProposalPage() {
     })
   }
 
+  const currentDateSuffix = (() => {
+    const d = new Date()
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const yy = String(d.getFullYear()).slice(-2)
+    return `${mm}${yy}`
+  })()
+
   const handleCreateProposal = async () => {
-    if (!client || !proposalTitle || selectedProducts.length === 0 || selectedSchemes.length === 0) return
+    if (!client || !proposalTitle || !proposalCode || selectedProducts.length === 0 || selectedSchemes.length === 0) return
 
     setIsSubmitting(true)
     try {
       const proposalData: ProposalCreate = {
         title: proposalTitle,
+        code: proposalCode.trim(),
         client_id: client.id,
         combine_schemes: combineSchemes,
         products: selectedProducts.map(p => ({
@@ -101,7 +110,7 @@ export default function NewProposalPage() {
       case 1: return selectedProducts.length > 0
       case 2: return selectedSchemes.length > 0
       case 3: return client !== null
-      case 4: return proposalTitle.trim().length > 0
+      case 4: return proposalTitle.trim().length > 0 && proposalCode.trim().length > 0
       default: return false
     }
   }
@@ -332,6 +341,23 @@ export default function NewProposalPage() {
             </h3>
 
             <div className="space-y-6">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  Código de Propuesta *
+                </label>
+                <input
+                  type="text"
+                  placeholder={`Ej: 3018-${currentDateSuffix}`}
+                  value={proposalCode}
+                  onChange={(e) => setProposalCode(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-quipux-blue focus:border-quipux-blue outline-none transition-all font-mono"
+                />
+                <p className="mt-1.5 text-xs text-gray-500">
+                  Consecutivo del archivo de seguimiento + fecha de elaboración ({currentDateSuffix}).
+                  Ejemplo: <span className="font-mono">3018-{currentDateSuffix}</span>
+                </p>
+              </div>
+
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">
                   Título de la Propuesta *
