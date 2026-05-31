@@ -9,17 +9,24 @@ Flujo de usuario completo para crear y gestionar propuestas en Innti Propuestas.
 
 ## 1️⃣ Crear Nueva Propuesta
 
-**Ubicación UI:** HomePage → "Nueva Propuesta"
+**Ubicación UI:** HomePage → "Nueva Propuesta"  
+**Flujo en 4 pasos** (`NewProposalPage`):
 
-1. Seleccionar **cliente** de la lista (o crear uno nuevo)
-2. Ingresar **título** de la propuesta
-3. Seleccionar **esquema(s)** (puede ser combinado):
+1. **Paso 1 — Productos:** Seleccionar productos del portafolio (ListaPortafolio.xlsx)
+2. **Paso 2 — Esquemas:** Seleccionar esquema(s) comerciales (puede ser combinado):
    - ☑️ Licenciamiento (pago único)
    - ☑️ Prestación de Servicios (mensual)
    - ☑️ Soporte y Mantenimiento (anual)
    - ⚠️ NO disponibles: Concesión/BPO, Suministro (Fase 2)
-4. Seleccionar **productos** del portafolio (ListaPortafolio.xlsx)
-5. Click: **Crear** → Propuesta en estado `DRAFT`
+3. **Paso 3 — Cliente:** Seleccionar cliente existente o crear uno nuevo
+4. **Paso 4 — Resumen:** Ingresar **código** y **título** de la propuesta
+
+**Campo Código (obligatorio en Paso 4):**
+- Formato: `XXXX-MMYY` donde `XXXX` es el consecutivo del archivo de seguimiento de oportunidades del repositorio y `MMYY` es el mes+año de elaboración (ej: `3018-0526` = consecutivo 3018, mayo 2026)
+- El sistema muestra el sufijo de fecha actual como referencia
+- El usuario ingresa el consecutivo consultando el archivo de seguimiento
+
+5. Click: **Crear Propuesta** → Propuesta en estado `DRAFT`
 
 **Referencia:** Skill `innti-domain` para entender esquemas
 
