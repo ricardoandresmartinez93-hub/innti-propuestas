@@ -2,6 +2,7 @@
 Endpoints para generación de documentos Word y PDF.
 """
 import logging
+import uuid
 import zipfile
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -231,7 +232,8 @@ def _build_proposal_docx(
     content = _prepare_proposal_content(proposal, use_innti, db)
     scheme_types = [s.scheme_type.value for s in proposal.schemes]
 
-    output_path = _get_output_dir() / f"propuesta_{proposal_id}.docx"
+    uid = uuid.uuid4().hex[:8]
+    output_path = _get_output_dir() / f"propuesta_{proposal_id}_{uid}.docx"
     return _generate_single_docx(
         proposal, content, DocumentGenerator(), portfolio_products, scheme_types, output_path
     )
@@ -308,7 +310,8 @@ def _build_separate_docx_files(
                     except InntiServiceError:
                         pass
 
-        filename = f"propuesta_{proposal_id}_{label}.docx"
+        uid = uuid.uuid4().hex[:8]
+        filename = f"propuesta_{proposal_id}_{label}_{uid}.docx"
         output_path = output_dir / filename
         _generate_single_docx(
             proposal, content, generator, portfolio_products,
@@ -345,7 +348,7 @@ def generate_document(
 
     if not proposal.combine_schemes and len(proposal.schemes) > 1:
         paths = _build_separate_docx_files(proposal_id, use_innti, db, settings)
-        zip_path = _get_output_dir() / f"propuesta_{proposal_id}_documentos.zip"
+        zip_path = _get_output_dir() / f"propuesta_{proposal_id}_documentos_{uuid.uuid4().hex[:8]}.zip"
         _pack_zip(paths, zip_path)
         return FileResponse(
             path=str(zip_path),
@@ -392,7 +395,7 @@ def generate_pdf(
                 )
             pdf_paths.append(pdf_path)
 
-        zip_path = _get_output_dir() / f"propuesta_{proposal_id}_pdfs.zip"
+        zip_path = _get_output_dir() / f"propuesta_{proposal_id}_pdfs_{uuid.uuid4().hex[:8]}.zip"
         _pack_zip(pdf_paths, zip_path)
         return FileResponse(
             path=str(zip_path),
@@ -436,7 +439,7 @@ def generate_technical_annex(
     doc = generator.generate_technical_annex(portfolio_products)
 
     output_dir = _get_output_dir()
-    filename = f"anexo_tecnico_{proposal_id}.docx"
+    filename = f"anexo_tecnico_{proposal_id}_{uuid.uuid4().hex[:8]}.docx"
     output_path = output_dir / filename
     generator.save_document(doc, str(output_path))
 
