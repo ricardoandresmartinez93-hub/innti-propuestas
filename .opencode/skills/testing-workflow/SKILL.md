@@ -39,6 +39,7 @@ pytest -v --tb=short
 | Archivo | Qué prueba |
 |---------|------------|
 | `test_proposals_api.py` | Endpoints CRUD de propuestas |
+| `test_proposals_products_router.py` | Endpoints de productos en propuestas (POST/DELETE/PUT) + 404 paths |
 | `test_proposals_mvp.py` | Flujo completo MVP (crear → generar → aprobar) |
 | `test_approvals.py` | Lógica de transiciones de estado |
 | `test_portfolio.py` | Carga y lectura de `ListaPortafolio.xlsx` |
@@ -46,6 +47,10 @@ pytest -v --tb=short
 | `test_document_gen.py` | Generación de documentos Word |
 | `test_proposal_code.py` | Generación de códigos de propuesta |
 | `test_users.py` | Endpoints de usuarios |
+| `test_auth.py` | Login y autenticación básica |
+| `test_auth_guards.py` | Guards de rol (`require_creator`, `require_approver_*`, `require_admin`) y validación JWT |
+| `test_email_service.py` | Notificaciones por email (aprobación/rechazo) con mocks de `smtplib` |
+| `test_error_handler_middleware.py` | Handlers de excepción de FastAPI (validación, Innti, portafolio, aprobación, global) |
 
 ### Estrategia de mocks para Innti
 Usar `unittest.mock.patch` para no llamar a la API real en tests:
