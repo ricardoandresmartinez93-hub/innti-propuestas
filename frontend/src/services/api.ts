@@ -6,8 +6,6 @@ import type {
   PortfolioProduct,
   Proposal,
   ProposalCreate,
-  ProposalScheme,
-  ProposalSchemeUpdate,
   Client,
   ClientCreate,
   Approval,
@@ -58,10 +56,6 @@ export const proposalApi = {
 
   update: (id: number, data: Partial<Proposal>) =>
     api.patch<Proposal>(`/proposals/${id}`, data),
-
-  /** PATCH del contenido de un esquema individual (alcance, IP, exclusiones, etc.). */
-  updateScheme: (proposalId: number, schemeId: number, data: ProposalSchemeUpdate) =>
-    api.patch<ProposalScheme>(`/proposals/${proposalId}/schemes/${schemeId}`, data),
 
   delete: (id: number) =>
     api.delete(`/proposals/${id}`),

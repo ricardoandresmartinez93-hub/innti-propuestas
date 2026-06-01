@@ -84,19 +84,7 @@ export interface ProposalScheme {
   id?: number
   scheme_type: SchemeType
   payment_frequency?: string
-  // Contenido por esquema (alcance, plazo, condiciones económicas, forma de pago,
-  // servicios excluidos y propiedad intelectual viven a este nivel —
-  // cada esquema puede tener contenido propio).
-  scope_content?: string
-  validity_period?: string
-  economic_conditions?: string
-  payment_terms?: string
-  excluded_services?: string
-  ip_section?: string
 }
-
-/** Subconjunto editable de ProposalScheme (lo que acepta el PATCH del esquema). */
-export type ProposalSchemeUpdate = Partial<Omit<ProposalScheme, 'id' | 'scheme_type'>>
 
 export interface Proposal {
   id: number
@@ -104,10 +92,15 @@ export interface Proposal {
   code?: string
   status: ProposalStatus
   combine_schemes: boolean
-  // Globales — compartidos por todos los esquemas de la propuesta
   cover_title?: string
   letter_content?: string
   context_content?: string
+  scope_content?: string
+  validity_period?: string
+  economic_conditions?: string
+  payment_terms?: string
+  excluded_services?: string
+  ip_section?: string
   confidentiality?: string
   client_id: number
   products: ProposalProduct[]

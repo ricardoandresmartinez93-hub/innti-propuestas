@@ -364,41 +364,24 @@ class TestBothFieldsTogether:
 # ---------------------------------------------------------------------------
 
 class TestDocumentsRouterIntegration:
-    """Verifica que _build_combined_docx propague el contenido por esquema al generador.
+    """Verifica que _build_proposal_docx pase los campos excluidos e ip al generador."""
 
-    El contenido por esquema vive en ProposalScheme; el router lo resuelve vía
-    ``proposal_content_resolver`` y lo pasa al generador como ``schemes_payload``.
-    """
+    def test_router_passes_excluded_services_to_generator(self):
+        """_build_proposal_docx debe propagar excluded_services de la BD al generador."""
+        from app.routers.documents import _build_proposal_docx
+        from unittest.mock import patch, MagicMock
+        import tempfile
+        from pathlib import Path
 
-    @staticmethod
-    def _build_mock_scheme(
-        scheme_type: str = "licensing",
-        excluded_services=None,
-        ip_section=None,
-        scope_content="",
-        economic_conditions=None,
-        payment_terms=None,
-        validity_period=None,
-    ):
-        mock_scheme = MagicMock()
-        mock_scheme.id = 1
-        mock_scheme.scheme_type.value = scheme_type
-        mock_scheme.payment_frequency = "unico"
-        mock_scheme.scope_content = scope_content
-        mock_scheme.validity_period = validity_period
-        mock_scheme.economic_conditions = economic_conditions
-        mock_scheme.payment_terms = payment_terms
-        mock_scheme.excluded_services = excluded_services
-        mock_scheme.ip_section = ip_section
-        return mock_scheme
-
-    @staticmethod
-    def _build_mock_proposal(scheme):
+        # Construir mocks de Propuesta y Cliente
         mock_client = MagicMock()
         mock_client.name = "Ana García"
         mock_client.position = "Gerente"
         mock_client.entity = "Entidad Test"
         mock_client.city = "Medellín"
+
+        mock_scheme = MagicMock()
+        mock_scheme.scheme_type.value = "licensing"
 
         mock_product = MagicMock()
         mock_product.product_name = "Producto Test"
@@ -409,24 +392,16 @@ class TestDocumentsRouterIntegration:
         mock_proposal.title = "Propuesta Test"
         mock_proposal.cover_title = None
         mock_proposal.client = mock_client
-        mock_proposal.schemes = [scheme]
+        mock_proposal.schemes = [mock_scheme]
         mock_proposal.products = [mock_product]
         mock_proposal.context_content = ""
+        mock_proposal.scope_content = ""
         mock_proposal.letter_content = ""
-        mock_proposal.combine_schemes = True
-        return mock_proposal
-
-    def test_router_passes_excluded_services_to_generator(self):
-        """Si ProposalScheme.excluded_services tiene contenido, debe llegar al generador."""
-        from app.routers.documents import _build_combined_docx
-        import tempfile
-        from pathlib import Path
-
-        scheme = self._build_mock_scheme(
-            excluded_services="Servicio excluido de prueba",
-            ip_section="IP de prueba",
-        )
-        mock_proposal = self._build_mock_proposal(scheme)
+        mock_proposal.validity_period = None
+        mock_proposal.economic_conditions = None
+        mock_proposal.payment_terms = None
+        mock_proposal.excluded_services = "Servicio excluido de prueba"
+        mock_proposal.ip_section = "IP de prueba"
 
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_proposal
@@ -441,44 +416,60 @@ class TestDocumentsRouterIntegration:
             with patch("app.routers.documents.DocumentGenerator") as MockGenerator:
                 mock_gen_instance = MagicMock()
                 MockGenerator.return_value = mock_gen_instance
-                mock_gen_instance.generate_combined_proposal_docx.return_value = MagicMock()
+                mock_gen_instance.generate_proposal_docx.return_value = MagicMock()
                 mock_gen_instance.save_document.return_value = str(
                     Path(tempfile.gettempdir()) / "innti_docs" / "propuesta_99.docx"
                 )
 
-                _build_combined_docx(
+                _build_proposal_docx(
                     proposal_id=99,
                     use_innti=False,
                     db=mock_db,
                     settings=mock_settings,
                 )
 
-                call_kwargs = mock_gen_instance.generate_combined_proposal_docx.call_args.kwargs
-                schemes_payload = call_kwargs["schemes_payload"]
-                assert len(schemes_payload) == 1
-                assert schemes_payload[0]["excluded_services_text"] == "Servicio excluido de prueba"
-                assert schemes_payload[0]["ip_section_text"] == "IP de prueba"
+                call_kwargs = mock_gen_instance.generate_proposal_docx.call_args.kwargs
+                assert call_kwargs["excluded_services"] == "Servicio excluido de prueba"
+                assert call_kwargs["ip_section"] == "IP de prueba"
 
-    def test_router_applies_default_ip_per_scheme_when_db_is_none(self):
-        """Cuando ip_section / excluded_services son None en BD, el resolver aplica defaults por esquema.
-
-        Para SaaS (services), excluded_services_text default es "" (no se renderiza la sección).
-        Para licensing, debe aplicar el IP_TEXT_BY_SCHEME['licensing'] y la lista de exclusiones.
-        """
-        from app.routers.documents import _build_combined_docx
-        from app.services.document_generator import DocumentGenerator
+    def test_router_passes_empty_strings_when_db_fields_are_none(self):
+        """Cuando los campos son None en BD, el router pasa cadena vacía al generador."""
+        from app.routers.documents import _build_proposal_docx
         import tempfile
         from pathlib import Path
 
-        scheme = self._build_mock_scheme(
-            scheme_type="services",
-            excluded_services=None,
-            ip_section=None,
-        )
-        mock_proposal = self._build_mock_proposal(scheme)
+        mock_client = MagicMock()
+        mock_client.name = "Pedro Ruiz"
+        mock_client.position = ""
+        mock_client.entity = "Corp Test"
+        mock_client.city = "Cali"
+
+        mock_scheme = MagicMock()
+        mock_scheme.scheme_type.value = "services"
+
+        mock_product = MagicMock()
+        mock_product.product_name = "Producto Y"
+        mock_product.category = ""
+
+        mock_proposal = MagicMock()
+        mock_proposal.id = 77
+        mock_proposal.title = "Propuesta Y"
+        mock_proposal.cover_title = None
+        mock_proposal.client = mock_client
+        mock_proposal.schemes = [mock_scheme]
+        mock_proposal.products = [mock_product]
+        mock_proposal.context_content = None
+        mock_proposal.scope_content = None
+        mock_proposal.letter_content = None
+        mock_proposal.validity_period = None
+        mock_proposal.economic_conditions = None
+        mock_proposal.payment_terms = None
+        mock_proposal.excluded_services = None   # ← None en BD
+        mock_proposal.ip_section = None           # ← None en BD
 
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_proposal
+
         mock_settings = MagicMock()
         mock_settings.portfolio_file_path = "dummy.xlsx"
 
@@ -489,30 +480,23 @@ class TestDocumentsRouterIntegration:
             with patch("app.routers.documents.DocumentGenerator") as MockGenerator:
                 mock_gen_instance = MagicMock()
                 MockGenerator.return_value = mock_gen_instance
-                mock_gen_instance.generate_combined_proposal_docx.return_value = MagicMock()
+                mock_gen_instance.generate_proposal_docx.return_value = MagicMock()
                 mock_gen_instance.save_document.return_value = str(
                     Path(tempfile.gettempdir()) / "innti_docs" / "propuesta_77.docx"
                 )
 
-                _build_combined_docx(
+                _build_proposal_docx(
                     proposal_id=77,
                     use_innti=False,
                     db=mock_db,
                     settings=mock_settings,
                 )
 
-                call_kwargs = mock_gen_instance.generate_combined_proposal_docx.call_args.kwargs
-                schemes_payload = call_kwargs["schemes_payload"]
-                assert len(schemes_payload) == 1
-                # SaaS: lista de exclusiones vacía → texto vacío
-                assert schemes_payload[0]["excluded_services_text"] == ""
-                # IP fallback: debe aplicar el texto de IP_TEXT_BY_SCHEME['services']
-                ip_html = schemes_payload[0]["ip_section_text"]
-                # El texto de SaaS empieza con "Los servicios prestados por QUIPUX a {client_entity}"
-                assert "Los servicios prestados por QUIPUX" in ip_html
-                assert "Entidad Test" in ip_html
-                # Debe ser distinto del IP de licensing (que habla de "arquitectura")
-                assert "arquitectura" not in ip_html.lower()
+                call_kwargs = mock_gen_instance.generate_proposal_docx.call_args.kwargs
+                # None en BD → el router lo convierte a "" antes de pasar al generador.
+                # Con "" el generador OMITE las secciones (Tarea 2: pestañas vacías no aparecen).
+                assert call_kwargs["excluded_services"] == ""
+                assert call_kwargs["ip_section"] == ""
 
 
 # ---------------------------------------------------------------------------

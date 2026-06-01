@@ -1,16 +1,5 @@
 """
 Endpoints para generación de documentos Word y PDF.
-
-El contenido de la propuesta se resuelve por esquema vía
-``proposal_content_resolver`` — cada ``ProposalScheme`` tiene su propio
-alcance, plazo, condiciones económicas, forma de pago, servicios excluidos y
-propiedad intelectual.
-
-Modo combinado (``combine_schemes=True``): un único Word con N bloques
-"ESQUEMA: …" donde cada uno trae sus secciones.
-
-Modo separado (``combine_schemes=False`` y >= 2 esquemas): un .docx por
-esquema, empaquetados en ZIP.
 """
 import logging
 import uuid
@@ -27,14 +16,10 @@ from typing import Optional
 
 from app.database import get_db
 from app.config import get_settings, Settings
-from app.models.proposal import Proposal, ProposalScheme
+from app.models.proposal import Proposal
 from app.services.document_generator import DocumentGenerator
 from app.services.portfolio_service import PortfolioService
 from app.services.innti_service import InntiService, InntiServiceError
-from app.services.proposal_content_resolver import (
-    resolve_scheme_content,
-    resolve_combined_content,
-)
 
 router = APIRouter(prefix="/api/proposals", tags=["Documentos"])
 
@@ -55,7 +40,10 @@ def _cover_letter_fallback(
     client_entity: str,
     proposal_title: str,
 ) -> str:
-    """Template HTML para la carta de presentación cuando Innti falla."""
+    """
+    Template HTML para la carta de presentación.
+    Se usa cuando Innti no responde o devuelve contenido vacío.
+    """
     position_part = f", {client_position}" if client_position else ""
     return (
         f"<p>Estimado(a) señor(a) <strong>{client_name}</strong>{position_part},</p>"
@@ -83,151 +71,172 @@ def _get_output_dir() -> Path:
     return output_dir
 
 
-# ---------------------------------------------------------------------------
-# Generación de contenido con Innti
-# ---------------------------------------------------------------------------
-
-def _generate_global_content_with_innti(proposal: Proposal, db: Session) -> None:
-    """Genera contenido GLOBAL (carta y contexto) con Innti y lo persiste.
-
-    No toca contenido por esquema; eso lo hace ``_generate_scheme_content_with_innti``.
-    """
-    innti = InntiService()
-    client = proposal.client
-
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        ctx_future = pool.submit(
-            innti.generate_context_section, client.entity, proposal.title
-        )
-        letter_future = pool.submit(
-            innti.generate_cover_letter,
-            client.name, client.position or "", client.entity, proposal.title,
-        )
-
-        try:
-            proposal.context_content = ctx_future.result()
-        except InntiServiceError as e:
-            log.warning("Innti [context]: %s", e)
-
-        try:
-            letter = letter_future.result()
-            if letter:
-                proposal.letter_content = letter
-            else:
-                log.warning("Innti [letter]: returned empty — using fallback")
-                proposal.letter_content = _cover_letter_fallback(
-                    client.name, client.position or "", client.entity, proposal.title
-                )
-        except InntiServiceError as e:
-            log.warning("Innti [letter]: %s — using fallback", e)
-            proposal.letter_content = _cover_letter_fallback(
-                client.name, client.position or "", client.entity, proposal.title
-            )
-
-    db.commit()
-
-
-def _generate_scheme_content_with_innti(
-    proposal: Proposal, scheme: ProposalScheme, product_names: list[str], db: Session
-) -> None:
-    """Genera contenido POR ESQUEMA (alcance, plazo, condiciones, pago) con Innti.
-
-    Persiste el resultado en el propio ``ProposalScheme``. Los textos fijos
-    (exclusiones, IP) se dejan en blanco para que el resolver aplique los
-    defaults por tipo de esquema en tiempo de render.
-    """
-    innti = InntiService()
-    scheme_str = scheme.scheme_type.value if hasattr(scheme.scheme_type, "value") else str(scheme.scheme_type)
-    label = SCHEME_LABEL.get(scheme_str, scheme_str)
-
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        futures = {
-            "scope_content": pool.submit(
-                innti.generate_scope_section, product_names, scheme_str
-            ),
-            "validity_period": pool.submit(
-                innti.generate_validity_section, scheme_str
-            ),
-            "economic_conditions": pool.submit(
-                innti.generate_economic_conditions_section,
-                product_names, scheme_str, label,
-            ),
-            "payment_terms": pool.submit(
-                innti.generate_payment_terms_section, scheme_str
-            ),
-        }
-        for field, future in futures.items():
-            try:
-                setattr(scheme, field, future.result())
-            except InntiServiceError as e:
-                log.warning("Innti [%s/%s]: %s", scheme_str, field, e)
-
-    db.commit()
-
-
-def _ensure_content_ready(
+def _prepare_proposal_content(
     proposal: Proposal,
     use_innti: bool,
     db: Session,
-) -> None:
-    """Si ``use_innti=True``, genera todo el contenido faltante y lo persiste."""
-    if not use_innti:
-        return
-
-    _generate_global_content_with_innti(proposal, db)
-    product_names = [p.product_name for p in proposal.products]
-    for scheme in proposal.schemes:
-        _generate_scheme_content_with_innti(proposal, scheme, product_names, db)
-
-
-# ---------------------------------------------------------------------------
-# Generación de archivos
-# ---------------------------------------------------------------------------
-
-def _load_portfolio_products(proposal: Proposal, settings: Settings):
-    portfolio = PortfolioService(settings.portfolio_file_path)
-    product_names = [p.product_name for p in proposal.products]
-    portfolio_products = portfolio.get_by_names(product_names)
-    category_map = {p.product_name.lower(): p.category or "" for p in proposal.products}
-    for pp in portfolio_products:
-        pp.category = category_map.get(pp.name.lower(), "")
-    return portfolio_products
-
-
-def _build_combined_docx(
-    proposal_id: int,
-    use_innti: bool,
-    db: Session,
-    settings: Settings,
-) -> Path:
-    """Genera un único Word con todos los esquemas combinados (combine_schemes=True)."""
-    proposal = db.query(Proposal).filter(Proposal.id == proposal_id).first()
-    if not proposal:
-        raise HTTPException(status_code=404, detail="Propuesta no encontrada")
-
-    _ensure_content_ready(proposal, use_innti, db)
-
-    portfolio_products = _load_portfolio_products(proposal, settings)
-    combined = resolve_combined_content(proposal)
+) -> dict:
+    """
+    Resuelve el contenido textual de la propuesta.
+    Si use_innti=True genera con Innti y persiste el resultado.
+    Cada sección tiene su propio try/except: un fallo parcial no cancela las demás.
+    """
     client = proposal.client
+    product_names = [p.product_name for p in proposal.products]
 
-    generator = DocumentGenerator()
-    doc = generator.generate_combined_proposal_docx(
+    content = {
+        "context_text": proposal.context_content or "",
+        "scope_text": proposal.scope_content or "",
+        "letter_text": proposal.letter_content or "",
+        "excluded_services_text": proposal.excluded_services or "",
+        "ip_section_text": proposal.ip_section or "",
+        "validity_period": proposal.validity_period,
+        "economic_conditions": proposal.economic_conditions,
+        "payment_terms": proposal.payment_terms,
+    }
+
+    if use_innti:
+        innti = InntiService()
+        scheme_type_str = ", ".join(s.scheme_type.value for s in proposal.schemes)
+        scheme_label = " / ".join(s.scheme_type.value for s in proposal.schemes)
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            futures = {
+                "context_text": pool.submit(
+                    innti.generate_context_section, client.entity, proposal.title
+                ),
+                "scope_text": pool.submit(
+                    innti.generate_scope_section, product_names, scheme_type_str
+                ),
+                "letter_text": pool.submit(
+                    innti.generate_cover_letter,
+                    client.name, client.position or "", client.entity, proposal.title,
+                ),
+                "validity_period": pool.submit(
+                    innti.generate_validity_section, scheme_type_str
+                ),
+                "economic_conditions": pool.submit(
+                    innti.generate_economic_conditions_section,
+                    product_names, scheme_type_str, scheme_label,
+                ),
+                "payment_terms": pool.submit(
+                    innti.generate_payment_terms_section, scheme_type_str
+                ),
+                "excluded_services_text": pool.submit(
+                    innti.generate_excluded_services_section
+                ),
+                "ip_section_text": pool.submit(
+                    innti.generate_ip_section, client.entity
+                ),
+            }
+
+            for key, future in futures.items():
+                try:
+                    result = future.result()
+                    if key == "letter_text":
+                        if result:
+                            content[key] = result
+                        else:
+                            log.warning("Innti [letter]: returned empty — using fallback template")
+                            content[key] = _cover_letter_fallback(
+                                client.name, client.position or "", client.entity, proposal.title
+                            )
+                    else:
+                        content[key] = result
+                except InntiServiceError as e:
+                    if key == "letter_text":
+                        log.warning("Innti [letter]: %s — using fallback template", e)
+                        content[key] = _cover_letter_fallback(
+                            client.name, client.position or "", client.entity, proposal.title
+                        )
+                    else:
+                        log.warning("Innti [%s]: %s", key, e)
+
+        log.info(
+            "Innti generation complete — letter=%d chars, context=%d chars",
+            len(content["letter_text"] or ""),
+            len(content["context_text"] or ""),
+        )
+
+        proposal.context_content = content["context_text"]
+        proposal.scope_content = content["scope_text"]
+        proposal.letter_content = content["letter_text"]
+        proposal.validity_period = content["validity_period"]
+        proposal.economic_conditions = content["economic_conditions"]
+        proposal.payment_terms = content["payment_terms"]
+        proposal.excluded_services = content["excluded_services_text"]
+        proposal.ip_section = content["ip_section_text"]
+        db.commit()
+
+    return content
+
+
+def _generate_single_docx(
+    proposal: Proposal,
+    content: dict,
+    generator: DocumentGenerator,
+    portfolio_products,
+    scheme_types: list[str],
+    output_path: Path,
+) -> Path:
+    """Genera un .docx para los scheme_types dados y lo guarda en output_path."""
+    client = proposal.client
+    doc = generator.generate_proposal_docx(
         title=proposal.cover_title or proposal.title,
         client_name=client.name,
         client_position=client.position or "",
         client_entity=client.entity,
         client_city=client.city or "Bogotá",
+        scheme_types=scheme_types,
         products=portfolio_products,
-        context_text=combined["context_text"],
-        letter_text=combined["letter_text"],
-        schemes_payload=combined["schemes"],
+        context_text=content["context_text"],
+        scope_text=content["scope_text"],
+        letter_text=content["letter_text"],
+        validity_period=content["validity_period"],
+        economic_conditions=content["economic_conditions"],
+        payment_terms=content["payment_terms"],
+        excluded_services=content["excluded_services_text"],
+        ip_section=content["ip_section_text"],
     )
+    generator.save_document(doc, str(output_path))
+    return output_path
+
+
+def _build_proposal_docx(
+    proposal_id: int,
+    use_innti: bool,
+    db: Session,
+    settings: Settings,
+) -> Path:
+    """
+    Construye el documento Word combinado y lo guarda en un archivo temporal.
+
+    Returns:
+        Ruta del archivo .docx generado.
+
+    Raises:
+        HTTPException 404 si la propuesta no existe.
+    """
+    proposal = db.query(Proposal).filter(Proposal.id == proposal_id).first()
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Propuesta no encontrada")
+
+    portfolio = PortfolioService(settings.portfolio_file_path)
+    product_names = [p.product_name for p in proposal.products]
+    portfolio_products = portfolio.get_by_names(product_names)
+
+    category_map = {p.product_name.lower(): p.category or "" for p in proposal.products}
+    for pp in portfolio_products:
+        pp.category = category_map.get(pp.name.lower(), "")
+
+    content = _prepare_proposal_content(proposal, use_innti, db)
+    scheme_types = [s.scheme_type.value for s in proposal.schemes]
 
     uid = uuid.uuid4().hex[:8]
     output_path = _get_output_dir() / f"propuesta_{proposal_id}_{uid}.docx"
-    generator.save_document(doc, str(output_path))
-    return output_path
+    return _generate_single_docx(
+        proposal, content, DocumentGenerator(), portfolio_products, scheme_types, output_path
+    )
 
 
 def _build_separate_docx_files(
@@ -236,45 +245,78 @@ def _build_separate_docx_files(
     db: Session,
     settings: Settings,
 ) -> list[Path]:
-    """Genera un .docx por esquema con su contenido específico (combine_schemes=False)."""
+    """
+    Genera un .docx por esquema.
+
+    Cuando use_innti=True, las secciones compartidas (contexto, alcance, carta,
+    servicios excluidos, propiedad intelectual) se generan una sola vez.
+    Las secciones que dependen del tipo de pago (plazo, condiciones económicas,
+    forma de pago) se generan individualmente por esquema para que cada documento
+    refleje correctamente su propia frecuencia de pago.
+
+    Returns:
+        Lista de rutas de archivos .docx generados.
+
+    Raises:
+        HTTPException 404 si la propuesta no existe.
+    """
     proposal = db.query(Proposal).filter(Proposal.id == proposal_id).first()
     if not proposal:
         raise HTTPException(status_code=404, detail="Propuesta no encontrada")
 
-    _ensure_content_ready(proposal, use_innti, db)
+    portfolio = PortfolioService(settings.portfolio_file_path)
+    product_names = [p.product_name for p in proposal.products]
+    portfolio_products = portfolio.get_by_names(product_names)
 
-    portfolio_products = _load_portfolio_products(proposal, settings)
-    client = proposal.client
+    category_map = {p.product_name.lower(): p.category or "" for p in proposal.products}
+    for pp in portfolio_products:
+        pp.category = category_map.get(pp.name.lower(), "")
+
+    # Contenido base: las secciones compartidas son correctas para todos los esquemas.
+    # Si use_innti=True, las secciones específicas de esquema (plazo, condiciones
+    # económicas, forma de pago) se sobreescriben por esquema en el loop a continuación.
+    base_content = _prepare_proposal_content(proposal, use_innti, db)
+
     output_dir = _get_output_dir()
     generator = DocumentGenerator()
     paths: list[Path] = []
 
     for scheme in proposal.schemes:
-        scheme_str = scheme.scheme_type.value if hasattr(scheme.scheme_type, "value") else str(scheme.scheme_type)
+        scheme_str = scheme.scheme_type.value
         label = SCHEME_LABEL.get(scheme_str, scheme_str)
-        content = resolve_scheme_content(proposal, scheme)
 
-        doc = generator.generate_proposal_docx(
-            title=proposal.cover_title or proposal.title,
-            client_name=client.name,
-            client_position=client.position or "",
-            client_entity=client.entity,
-            client_city=client.city or "Bogotá",
-            scheme_types=[scheme_str],
-            products=portfolio_products,
-            context_text=content["context_text"],
-            scope_text=content["scope_text"],
-            letter_text=content["letter_text"],
-            validity_period=content["validity_period"],
-            economic_conditions=content["economic_conditions"],
-            payment_terms=content["payment_terms"],
-            excluded_services=content["excluded_services_text"],
-            ip_section=content["ip_section_text"],
-        )
+        # Clonar el contenido base y sobreescribir las secciones dependientes del esquema
+        content = dict(base_content)
+
+        if use_innti:
+            innti = InntiService()
+
+            with ThreadPoolExecutor(max_workers=3) as pool:
+                scheme_futures = {
+                    "validity_period": pool.submit(
+                        innti.generate_validity_section, scheme_str
+                    ),
+                    "economic_conditions": pool.submit(
+                        innti.generate_economic_conditions_section,
+                        product_names, scheme_str, label,
+                    ),
+                    "payment_terms": pool.submit(
+                        innti.generate_payment_terms_section, scheme_str
+                    ),
+                }
+                for key, future in scheme_futures.items():
+                    try:
+                        content[key] = future.result()
+                    except InntiServiceError:
+                        pass
 
         uid = uuid.uuid4().hex[:8]
-        output_path = output_dir / f"propuesta_{proposal_id}_{label}_{uid}.docx"
-        generator.save_document(doc, str(output_path))
+        filename = f"propuesta_{proposal_id}_{label}_{uid}.docx"
+        output_path = output_dir / filename
+        _generate_single_docx(
+            proposal, content, generator, portfolio_products,
+            [scheme_str], output_path
+        )
         paths.append(output_path)
 
     return paths
@@ -288,10 +330,6 @@ def _pack_zip(file_paths: list[Path], zip_path: Path) -> Path:
     return zip_path
 
 
-# ---------------------------------------------------------------------------
-# Endpoints
-# ---------------------------------------------------------------------------
-
 @router.post("/{proposal_id}/generate-document")
 def generate_document(
     proposal_id: int,
@@ -299,8 +337,8 @@ def generate_document(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ):
-    """Genera el documento Word de la propuesta.
-
+    """
+    Genera el documento Word de la propuesta.
     Si la propuesta tiene combine_schemes=False y más de un esquema, devuelve un ZIP
     con un .docx por esquema. En caso contrario devuelve un único .docx.
     """
@@ -318,7 +356,7 @@ def generate_document(
             media_type="application/zip",
         )
 
-    output_path = _build_combined_docx(proposal_id, use_innti, db, settings)
+    output_path = _build_proposal_docx(proposal_id, use_innti, db, settings)
     return FileResponse(
         path=str(output_path),
         filename=output_path.name,
@@ -333,8 +371,8 @@ def generate_pdf(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ):
-    """Genera la propuesta en formato PDF.
-
+    """
+    Genera la propuesta en formato PDF.
     Si combine_schemes=False y más de un esquema, devuelve un ZIP con un PDF por esquema.
     """
     proposal = db.query(Proposal).filter(Proposal.id == proposal_id).first()
@@ -365,7 +403,7 @@ def generate_pdf(
             media_type="application/zip",
         )
 
-    docx_path = _build_combined_docx(proposal_id, use_innti, db, settings)
+    docx_path = _build_proposal_docx(proposal_id, use_innti, db, settings)
     pdf_path = docx_path.with_suffix(".pdf")
     try:
         generator.convert_docx_to_pdf(str(docx_path), str(pdf_path))

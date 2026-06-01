@@ -39,23 +39,20 @@ Se sirven como `FileResponse` de FastAPI (no como stream en memoria).
 
 ## Secciones del Documento Principal
 
-> ⚠️ Desde el refactor de mayo 2026, el contenido se reparte entre **global** (Proposal)
-> y **por esquema** (ProposalScheme). Ver `app/services/proposal_content_resolver.py`.
-
-| # | Sección | Scope | Campo | Generado por |
-|---|---------|-------|-------|--------------|
-| — | Carta de presentación | global | `Proposal.letter_content` | `InntiService.generate_cover_letter()` |
-| 1 | Contexto | global | `Proposal.context_content` | `InntiService.generate_context_section()` |
-| 2 | Alcance General | **por esquema** | `ProposalScheme.scope_content` | `InntiService.generate_scope_section(scheme)` |
-| 3 | Plazo | **por esquema** | `ProposalScheme.validity_period` | Manual o `InntiService.generate_validity_section(scheme)` |
-| 4 | Condiciones Económicas | **por esquema** | `ProposalScheme.economic_conditions` | Tabla auto con productos según el esquema, o manual |
-| 4 | — Forma de pago | **por esquema** | `ProposalScheme.payment_terms` | Manual o `InntiService.generate_payment_terms_section(scheme)` |
-| 5 | Servicios Excluidos | **por esquema** | `ProposalScheme.excluded_services` | Default `EXCLUDED_SERVICES_BY_SCHEME` (vacío para SaaS) |
-| 6.1 | Propiedad Intelectual | **por esquema** | `ProposalScheme.ip_section` | Default `IP_TEXT_BY_SCHEME[scheme_type]` |
-| 6.2 | Confidencialidad | global | `Proposal.confidentiality` (o `CONFIDENTIALITY_TEXT`) | Texto fijo con nombre de cliente |
-| 6.3 | Prevención de Actividades Delictivas | global | — | Texto fijo `CRIME_PREVENTION_TEXT` |
-| 6.4 | Transparencia y Ética Empresarial | global | — | Texto fijo `ETHICS_TEXT` |
-| — | **Anexo técnico** | global | — | `DocumentGenerator.generate_technical_annex()` |
+| # | Sección | Campo en `Proposal` | Generado por |
+|---|---------|---------------------|--------------|
+| — | Carta de presentación | `letter_content` | `InntiService.generate_cover_letter()` |
+| 1 | Contexto | `context_content` | `InntiService.generate_context_section()` |
+| 2 | Alcance General de la Propuesta | `scope_content` | `InntiService.generate_scope_section()` |
+| 3 | **Plazo** | `validity_period` | Edición **manual** en TipTap (o texto por defecto) |
+| 4 | Condiciones Económicas | `economic_conditions` | Tabla auto con productos; o edición manual |
+| 4 | — Forma de pago | `payment_terms` | Edición manual |
+| 5 | Servicios Excluidos | `excluded_services` | Lista fija de 10 items (editable) |
+| 6.1 | Propiedad Intelectual | `ip_section` | Texto fijo unificado con nombre de cliente |
+| 6.2 | Confidencialidad | `confidentiality` | Texto fijo con nombre de cliente |
+| 6.3 | Principios de Prevención de Actividades Delictivas | — | Texto fijo con nombre de cliente |
+| 6.4 | Cumplimiento Transparencia y Ética Empresarial | — | Texto fijo (`lineaetica@quipux.com`) |
+| — | **Anexo técnico** | — | `DocumentGenerator.generate_technical_annex()` |
 
 > ⚠️ La fecha de la carta se genera **automáticamente** con `datetime.date.today()` — no requiere edición manual.
 
@@ -64,42 +61,36 @@ Se sirven como `FileResponse` de FastAPI (no como stream en memoria).
 ## Textos Fijos (Constantes en `DocumentGenerator`)
 
 No modificar sin aprobación del área jurídica de Quipux:
-- `EXCLUDED_SERVICES_BY_SCHEME` — Dict `scheme_type → lista`. `licensing` y `support_maintenance` reciben la lista completa; **`services` queda vacío** (SaaS no excluye nada).
-- `IP_TEXT_BY_SCHEME` — Dict `scheme_type → texto` con `{client_entity}` parametrizado. Cada esquema tiene su propia variante (regla del PDF de reunión).
-- `IP_TEXT`, `EXCLUDED_SERVICES` — Aliases de retrocompatibilidad que apuntan al default de `licensing`.
+- `EXCLUDED_SERVICES` — Lista única de 10 items de servicios excluidos (igual para todos los esquemas)
+- `IP_TEXT` — Propiedad intelectual unificada (usa `{client_entity}`, reemplazado con nombre real)
 - `CONFIDENTIALITY_TEXT` — Confidencialidad (usa `{client_entity}`)
 - `CRIME_PREVENTION_TEXT` — Principios de prevención de actividades delictivas (usa `{client_entity}`)
 - `ETHICS_TEXT` — Referencia a `lineaetica@quipux.com`
 - `IPC_INDEXATION_TEXT` — Nota de indexación IPC (solo services/support_maintenance)
 - `DEFAULT_VALIDITY_TEXT` — Texto de plazo cuando no se edita manualmente
 
-Acceso preferido: `DocumentGenerator.get_ip_text(scheme_type)` y `DocumentGenerator.get_excluded_services(scheme_type)`.
-
 ## Modo `combine_schemes`
 
-- `combine_schemes = True` (default): un único documento generado por `generate_combined_proposal_docx`, con un bloque "ESQUEMA: …" por cada esquema (contenido distinto por esquema en alcance, plazo, condiciones, IP, exclusiones).
-- `combine_schemes = False`: ZIP con un documento por esquema, cada uno con SU contenido específico vía `resolve_scheme_content`. **Requiere ≥ 2 esquemas** (el validator de `ProposalCreate` rechaza con 422 si hay menos).
+- `combine_schemes = True` (default): todos los esquemas se incluyen en **un solo documento**.
+- `combine_schemes = False`: se genera un documento **separado** por esquema.
 
 ## Flujo Interno de Generación
 
 ```
 POST /api/proposals/{id}/generate-document
-    ├─► (combine_schemes=False y >=2 esquemas)
-    │       └─► _build_separate_docx_files()
-    │           ├─► _ensure_content_ready() — si use_innti=True, genera por esquema individual
-    │           │   y persiste en ProposalScheme.<campo>
-    │           ├─► loop esquemas → resolve_scheme_content(proposal, scheme)
-    │           │   └─► DocumentGenerator.generate_proposal_docx(...) → un .docx por esquema
-    │           └─► _pack_zip(...) → FileResponse(.zip)
-    │
-    └─► (combine_schemes=True o un solo esquema)
-            └─► _build_combined_docx()
-                ├─► _ensure_content_ready() — si use_innti=True, genera todo
-                ├─► resolve_combined_content(proposal)
-                └─► DocumentGenerator.generate_combined_proposal_docx(...) → FileResponse(.docx)
+    └─► documents router → _build_proposal_docx()
+        ├─► Consulta Proposal + Client + ProposalProducts desde BD
+        ├─► PortfolioService.get_by_names() → productos del portafolio
+        ├─► (Si use_innti=true y campos vacíos) InntiService genera:
+        │       - generate_cover_letter() → letter_content
+        │       - generate_context_section() → context_content
+        │       - generate_scope_section() → scope_content
+        │       - Se persisten en BD automáticamente
+        └─► DocumentGenerator.generate_proposal_docx(...) → FileResponse(.docx)
 
 POST /api/proposals/{id}/generate-pdf
-    └─► igual pero con convert_docx_to_pdf() después de cada generación
+    └─► _build_proposal_docx() → .docx en /tmp/
+        └─► DocumentGenerator.convert_docx_to_pdf() → FileResponse(.pdf)
 
 POST /api/proposals/{id}/generate-annex
     └─► PortfolioService + DocumentGenerator.generate_technical_annex() → FileResponse(.docx)

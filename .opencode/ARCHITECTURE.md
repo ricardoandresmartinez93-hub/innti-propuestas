@@ -97,10 +97,8 @@ Estas son las cosas que son fáciles de equivocar si no se leyó el código real
 5. **Los documentos se guardan en `/tmp/innti_docs/`** (FileResponse), no se sirven desde memoria (StreamingResponse).
 6. **No hay Alembic** — el esquema de BD se recrea con `Base.metadata.create_all` al iniciar.
 7. **`action` es campo requerido** en los bodies de `/approve` y `/reject`: `"action": "approved"` o `"action": "rejected"`. No tiene valor por defecto en el schema Pydantic.
-8. **ProposalEditor tiene 8 pestañas + sub-tabs por esquema**: 2 globales (Contexto, Carta de Presentación) y 6 por esquema (Alcance, Plazo, Condiciones Económicas, Forma de Pago, Servicios Excluidos, Propiedad Intelectual). Cuando hay ≥ 2 esquemas, las pestañas por esquema muestran un selector adicional para alternar entre el contenido de cada esquema. El botón Guardar persiste tanto cambios globales (vía `PATCH /api/proposals/{id}`) como cambios por esquema (vía `PATCH /api/proposals/{id}/schemes/{scheme_id}`).
+8. **ProposalEditor tiene 8 pestañas**: 5 editables siempre (contexto, alcance, plazo, condiciones económicas, forma de pago), 2 auto-completadas con texto fijo editable (servicios excluidos, propiedad intelectual), 1 solo lectura (carta de presentación). El botón Guardar funciona desde cualquier pestaña.
 9. **`key={proposal.updated_at}` en ProposalEditor**: fuerza re-mount del componente TipTap cuando Innti regenera el contenido, evitando contenido obsoleto en el editor sin recargar la página.
-10. **Contenido por esquema vs global**: el contenido textual de una propuesta se divide entre `Proposal` (globales: carta, contexto, confidencialidad) y `ProposalScheme` (por esquema: alcance, plazo, condiciones, pago, exclusiones, IP). El servicio `proposal_content_resolver.py` centraliza la resolución con defaults inteligentes (SaaS sin exclusiones, IP por tipo de esquema).
-11. **`combine_schemes=False` requiere ≥ 2 esquemas**: el validator de `ProposalCreate` rechaza con 422 si se intenta crear con un solo esquema. No tiene sentido pedir "Documentos separados" con un único esquema.
 
 ---
 
