@@ -55,6 +55,30 @@ describe('LoginPage', () => {
     unmount()
   })
 
+  it('shows "Usuario inactivo" message when user is inactive', async () => {
+    const inactiveError = Object.assign(new Error('Inactive'), {
+      response: { data: { detail: 'Usuario inactivo' } },
+    })
+    vi.mocked(useAuth).mockReturnValue({
+      login: vi.fn().mockRejectedValue(inactiveError),
+    } as any)
+
+    const { unmount } = render(
+      <BrowserRouter>
+        <LoginPage />
+      </BrowserRouter>
+    )
+
+    fireEvent.change(screen.getByPlaceholderText(/email/i), { target: { value: 'inactive@test.com' } })
+    fireEvent.change(screen.getByPlaceholderText(/contraseña/i), { target: { value: 'pass' } })
+    fireEvent.click(screen.getByRole('button', { name: /iniciar sesión/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/usuario inactivo/i)).toBeDefined()
+    })
+    unmount()
+  })
+
   it('redirects to /proposals on successful login', async () => {
     vi.mocked(useAuth).mockReturnValue({
       login: vi.fn().mockResolvedValue(undefined),

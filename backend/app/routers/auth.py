@@ -20,7 +20,12 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
             detail="Credenciales incorrectas",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Usuario inactivo",
+        )
+
     access_token = create_access_token(
         data={"sub": user.email, "user_id": user.id, "role": user.role}
     )
