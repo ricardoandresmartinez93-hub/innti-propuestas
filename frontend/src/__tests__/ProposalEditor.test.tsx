@@ -31,10 +31,11 @@ function createChain() {
   return new Proxy({}, handler)
 }
 
-const mockIsActive = vi.fn((_type: string) => false)
+const mockIsActive = vi.fn((_type: string | object, _attrs?: object) => false)
 const mockSetEditable = vi.fn()
 const mockSetContent = vi.fn()
 const mockGetHTML = vi.fn(() => '<p></p>')
+const mockGetAttributes = vi.fn((_type: string) => ({} as Record<string, unknown>))
 
 let currentEditorIsEditable = true
 
@@ -47,6 +48,8 @@ vi.mock('@tiptap/react', () => ({
     commands: { setContent: mockSetContent },
     setEditable: mockSetEditable,
     getHTML: mockGetHTML,
+    getAttributes: mockGetAttributes,
+    state: { selection: { from: 0, to: 0 } },
     on: vi.fn(),
     off: vi.fn(),
     destroy: vi.fn(),
@@ -64,6 +67,20 @@ vi.mock('@tiptap/extension-table', () => ({
 vi.mock('@tiptap/extension-table-row', () => ({ default: {} }))
 vi.mock('@tiptap/extension-table-cell', () => ({ default: {} }))
 vi.mock('@tiptap/extension-table-header', () => ({ default: {} }))
+vi.mock('@tiptap/extension-underline', () => ({ default: {} }))
+vi.mock('@tiptap/extension-link', () => ({
+  default: { configure: vi.fn(() => ({})) },
+}))
+vi.mock('@tiptap/extension-text-align', () => ({
+  default: { configure: vi.fn(() => ({})) },
+}))
+vi.mock('@tiptap/extension-highlight', () => ({
+  default: { configure: vi.fn(() => ({})) },
+}))
+vi.mock('@tiptap/extension-text-style', () => ({ default: {} }))
+vi.mock('@tiptap/extension-color', () => ({ Color: {} }))
+vi.mock('@tiptap/extension-superscript', () => ({ default: {} }))
+vi.mock('@tiptap/extension-subscript', () => ({ default: {} }))
 
 import ProposalEditor from '../components/ProposalEditor'
 
@@ -107,17 +124,31 @@ afterEach(() => {
   currentEditorIsEditable = true
 })
 
+/** Botones de la toolbar con su label visible. Se usa en varios tests. */
+const ALL_BUTTONS: readonly string[] = [
+  'B', 'I', 'U', 'S', 'x²', 'x₂',
+  'H1', 'H2', 'H3', '¶',
+  'Izq', 'Cen', 'Der', 'Just',
+  '• List', '1. List', '❝', '</>', 'Code', '—',
+  'Link', 'Tabla',
+  '↶', '↷', 'Limpiar',
+]
+
 describe('ProposalEditor — MenuBar: estructura de botones', () => {
-  it('renderiza los 8 botones de formato esperados', () => {
+  it('renderiza la barra completa de formato (todos los botones esperados)', () => {
     renderEditor()
-    expect(screen.getByRole('button', { name: 'B' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'I' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'H1' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'H2' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'H3' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '• List' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '1. List' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Tabla' })).toBeInTheDocument()
+    for (const name of ALL_BUTTONS) {
+      expect(
+        screen.getByRole('button', { name }),
+        `Botón "${name}" no encontrado`,
+      ).toBeInTheDocument()
+    }
+  })
+
+  it('renderiza los inputs de color para texto y resaltado', () => {
+    renderEditor()
+    expect(screen.getByLabelText('Color de texto')).toBeInTheDocument()
+    expect(screen.getByLabelText('Color de resaltado')).toBeInTheDocument()
   })
 })
 
@@ -126,19 +157,26 @@ describe('ProposalEditor — MenuBar: estado disabled', () => {
     renderEditor(makeProposal(), true)
     expect(screen.getByRole('button', { name: 'B' })).not.toBeDisabled()
     expect(screen.getByRole('button', { name: 'Tabla' })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: 'U' })).not.toBeDisabled()
+    expect(screen.getByLabelText('Color de texto')).not.toBeDisabled()
   })
 
   it('los botones están deshabilitados cuando isEditable=false (pestaña readOnly)', () => {
     renderEditor(makeProposal(), false)
-    for (const name of ['B', 'I', 'H1', 'H2', 'H3', '• List', '1. List', 'Tabla']) {
-      expect(screen.getByRole('button', { name }), `Botón "${name}"`).toBeDisabled()
+    for (const name of ALL_BUTTONS) {
+      expect(
+        screen.getByRole('button', { name }),
+        `Botón "${name}"`,
+      ).toBeDisabled()
     }
+    expect(screen.getByLabelText('Color de texto')).toBeDisabled()
+    expect(screen.getByLabelText('Color de resaltado')).toBeDisabled()
   })
 })
 
 describe('ProposalEditor — MenuBar: estado activo', () => {
   it('B tiene bg-blue-600 cuando bold está activo', () => {
-    mockIsActive.mockImplementation((type: string) => type === 'bold')
+    mockIsActive.mockImplementation((type: string | object) => type === 'bold')
     renderEditor(makeProposal(), true)
     expect(screen.getByRole('button', { name: 'B' })).toHaveClass('bg-blue-600')
   })
@@ -147,6 +185,35 @@ describe('ProposalEditor — MenuBar: estado activo', () => {
     mockIsActive.mockImplementation(() => false)
     renderEditor(makeProposal(), true)
     expect(screen.getByRole('button', { name: 'B' })).toHaveClass('bg-white')
+  })
+
+  it('U se activa cuando underline está activo', () => {
+    mockIsActive.mockImplementation((type: string | object) => type === 'underline')
+    renderEditor(makeProposal(), true)
+    expect(screen.getByRole('button', { name: 'U' })).toHaveClass('bg-blue-600')
+  })
+
+  it('Izq se activa cuando textAlign=left', () => {
+    mockIsActive.mockImplementation((type: string | object) => {
+      return typeof type === 'object' && (type as { textAlign?: string }).textAlign === 'left'
+    })
+    renderEditor(makeProposal(), true)
+    expect(screen.getByRole('button', { name: 'Izq' })).toHaveClass('bg-blue-600')
+  })
+
+  it('Link se activa cuando hay un enlace activo', () => {
+    mockIsActive.mockImplementation((type: string | object) => type === 'link')
+    renderEditor(makeProposal(), true)
+    expect(screen.getByRole('button', { name: 'Link' })).toHaveClass('bg-blue-600')
+  })
+
+  it('clic en "Limpiar" ejecuta el chain del editor sin error', () => {
+    renderEditor(makeProposal(), true)
+    mockRun.mockClear()
+    const limpiar = screen.getByRole('button', { name: 'Limpiar' })
+    // mouseDown es el handler real del botón (no usar click)
+    fireEvent.mouseDown(limpiar)
+    expect(mockRun).toHaveBeenCalled()
   })
 })
 
