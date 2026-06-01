@@ -24,7 +24,7 @@ Ejecuta todas las validaciones necesarias antes de hacer commit, asegurando que 
    ```powershell
    pytest --cov=app tests/
    ```
-   - Objetivo: cobertura ≥ 75% (actualmente ~76% — apuntar a 80% en próximos sprints)
+   - Objetivo: cobertura ≥ 75% (actualmente ~94% — mantener por encima del 90%)
 
 3. **Lint y tipos** (opcional si hay `ruff` instalado)
    ```powershell
@@ -57,7 +57,7 @@ Ejecuta todas las validaciones necesarias antes de hacer commit, asegurando que 
 ## Checklist Pre-Commit
 
 - [ ] Todos los tests pasan (`pytest` y `npm test`)
-- [ ] Cobertura backend ≥ 75% (objetivo: 80%)
+- [ ] Cobertura backend ≥ 75% (actual: ~94%)
 - [ ] Sin `console.log` en producción
 - [ ] Sin secretos en `.env.example`
 - [ ] Nombres de archivos/variables en snake_case (Python) o camelCase (TS)
