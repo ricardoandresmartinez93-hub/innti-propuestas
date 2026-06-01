@@ -42,6 +42,24 @@
 
 > **Fase 2 (no disponibles en MVP):** `concession_bpo` y `supply`. No implementar lógica para estos esquemas.
 
+### Contenido por esquema vs contenido global
+
+Desde el refactor de mayo 2026, el contenido de la propuesta se separa en dos niveles:
+
+- **Global (`Proposal`):** `cover_title`, `letter_content`, `context_content`, `confidentiality`. Compartidos por todos los esquemas.
+- **Por esquema (`ProposalScheme`):** `scope_content`, `validity_period`, `economic_conditions`, `payment_terms`, `excluded_services`, `ip_section`. Cada esquema tiene su propio texto.
+
+La resolución se centraliza en `app/services/proposal_content_resolver.py` (`resolve_scheme_content` y `resolve_combined_content`). Reglas de defaults:
+- Servicios excluidos: lista por defecto para `licensing` y `support_maintenance`; **vacío** para `services` (SaaS no excluye nada).
+- Propiedad intelectual: texto distinto por esquema en `DocumentGenerator.IP_TEXT_BY_SCHEME`.
+
+### Modo combinado vs separado
+
+| Modo | Cuándo | Resultado |
+|------|--------|-----------|
+| `combine_schemes=True` | 1 o más esquemas (default) | Un único `.docx` / `.pdf` con un bloque "ESQUEMA: …" por cada esquema |
+| `combine_schemes=False` | Requiere ≥ 2 esquemas (validator rechaza con 422 si hay menos) | ZIP con un documento por esquema; cada documento usa el contenido específico de su esquema |
+
 ### Flujo de Estados de Propuesta
 Los nombres de estado son **valores del enum `ProposalStatus`** (usar siempre estas cadenas exactas):
 
@@ -79,8 +97,10 @@ DRAFT ──► PENDING_REVIEW ──► REVIEWED ──► PENDING_VP ──►
 | `POST /api/proposals/{id}/submit-review` | Detecta estado actual y avanza: DRAFT→PENDING_REVIEW · REVIEWED→PENDING_VP · APPROVED→SENT_TO_CLIENT · REJECTED→DRAFT |
 | `POST /api/proposals/{id}/approve` | Registra aprobación (body: `role`, `approver_name`, `action: "approved"`, `comments?`) |
 | `POST /api/proposals/{id}/reject` | Registra rechazo (body: `role`, `approver_name`, `action: "rejected"`, `comments` obligatorio) |
-| `POST /api/proposals/{id}/generate-document` | Genera y descarga el Word (usa Innti si `use_innti=true`) |
-| `POST /api/proposals/{id}/generate-pdf` | Genera y descarga el PDF |
+| `PATCH /api/proposals/{id}` | Edita contenido **global** (carta, contexto, confidencialidad, combine_schemes) |
+| `PATCH /api/proposals/{id}/schemes/{scheme_id}` | Edita contenido **por esquema** (alcance, plazo, condiciones económicas, forma de pago, exclusiones, IP) |
+| `POST /api/proposals/{id}/generate-document` | Genera y descarga el Word — `.docx` único o ZIP según `combine_schemes` |
+| `POST /api/proposals/{id}/generate-pdf` | Genera y descarga el PDF — `.pdf` único o ZIP según `combine_schemes` |
 | `POST /api/proposals/{id}/generate-annex` | Genera y descarga el Anexo Técnico (.docx) |
 
 ### Portafolio

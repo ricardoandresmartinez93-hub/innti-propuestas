@@ -34,7 +34,15 @@ MVP_SCHEME_TYPES = {SchemeType.LICENSING, SchemeType.SERVICES, SchemeType.SUPPOR
 
 
 class Proposal(Base):
-    """Propuesta comercial principal."""
+    """Propuesta comercial principal.
+
+    Contenido global (compartido por todos los esquemas):
+        - cover_title, letter_content, context_content, confidentiality.
+
+    Contenido por esquema (alcance, plazo, condiciones económicas, forma de pago,
+    servicios excluidos, propiedad intelectual) vive en ProposalScheme — esto permite
+    que "Documentos separados" produzca documentos realmente diferenciados.
+    """
     __tablename__ = "proposals"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -51,17 +59,11 @@ class Proposal(Base):
         comment="True=combinar esquemas en un documento, False=documentos separados"
     )
 
-    # Contenido editable (HTML del editor TipTap)
+    # Contenido global editable (HTML del editor TipTap)
     cover_title = Column(String(500), nullable=True, comment="Título de portada")
-    letter_content = Column(Text, nullable=True, comment="Contenido de carta de presentación")
-    context_content = Column(Text, nullable=True, comment="Contenido de contexto/introducción")
-    scope_content = Column(Text, nullable=True, comment="Contenido de alcance")
-    validity_period = Column(Text, nullable=True, comment="Plazo/vigencia del contrato")
-    economic_conditions = Column(Text, nullable=True, comment="Condiciones económicas (edición manual)")
-    payment_terms = Column(Text, nullable=True, comment="Forma de pago (edición manual)")
-    excluded_services = Column(Text, nullable=True, comment="Servicios excluidos")
-    ip_section = Column(Text, nullable=True, comment="Propiedad intelectual")
-    confidentiality = Column(Text, nullable=True, comment="Confidencialidad y ética")
+    letter_content = Column(Text, nullable=True, comment="Carta de presentación (global)")
+    context_content = Column(Text, nullable=True, comment="Contexto/introducción (global)")
+    confidentiality = Column(Text, nullable=True, comment="Confidencialidad y ética (global)")
 
     # Relaciones
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=False)
@@ -98,7 +100,13 @@ class ProposalProduct(Base):
 
 
 class ProposalScheme(Base):
-    """Esquema de propuesta seleccionado."""
+    """Esquema de propuesta seleccionado, con contenido propio por esquema.
+
+    Cada esquema (licensing, services, support_maintenance) tiene su propio alcance,
+    plazo, condiciones económicas, forma de pago, servicios excluidos y propiedad
+    intelectual. Cuando combine_schemes=False, cada esquema se exporta como un
+    documento independiente usando estos campos.
+    """
     __tablename__ = "proposal_schemes"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -108,6 +116,14 @@ class ProposalScheme(Base):
         String(50), nullable=True,
         comment="Frecuencia de pago: unico, mensual, anual"
     )
+
+    # Contenido editable por esquema
+    scope_content = Column(Text, nullable=True, comment="Alcance específico de este esquema")
+    validity_period = Column(Text, nullable=True, comment="Plazo/vigencia de este esquema")
+    economic_conditions = Column(Text, nullable=True, comment="Condiciones económicas de este esquema")
+    payment_terms = Column(Text, nullable=True, comment="Forma de pago de este esquema")
+    excluded_services = Column(Text, nullable=True, comment="Servicios excluidos de este esquema (SaaS suele quedar vacío)")
+    ip_section = Column(Text, nullable=True, comment="Propiedad intelectual aplicable a este esquema")
 
     # Relación
     proposal = relationship("Proposal", back_populates="schemes")

@@ -13,7 +13,9 @@ from app.models.proposal import (
 )
 from app.models.client import Client
 from app.schemas.proposal import (
-    ProposalCreate, ProposalRead, ProposalUpdate, ProposalProductCreate, ProposalProductRead
+    ProposalCreate, ProposalRead, ProposalUpdate,
+    ProposalProductCreate, ProposalProductRead,
+    ProposalSchemeRead, ProposalSchemeUpdate,
 )
 
 router = APIRouter(prefix="/api/proposals", tags=["Propuestas"])
@@ -59,12 +61,18 @@ def create_proposal(data: ProposalCreate, db: Session = Depends(get_db), current
         )
         db.add(db_prod)
 
-    # Agregar esquemas
+    # Agregar esquemas (con su contenido inicial opcional)
     for scheme in data.schemes:
         db_scheme = ProposalScheme(
             proposal_id=proposal.id,
             scheme_type=scheme.scheme_type,
             payment_frequency=scheme.payment_frequency,
+            scope_content=scheme.scope_content,
+            validity_period=scheme.validity_period,
+            economic_conditions=scheme.economic_conditions,
+            payment_terms=scheme.payment_terms,
+            excluded_services=scheme.excluded_services,
+            ip_section=scheme.ip_section,
         )
         db.add(db_scheme)
 
@@ -201,6 +209,37 @@ def remove_proposal_product(
 
     db.delete(product)
     db.commit()
+
+
+@router.patch("/{proposal_id}/schemes/{scheme_id}", response_model=ProposalSchemeRead)
+def update_proposal_scheme(
+    proposal_id: int,
+    scheme_id: int,
+    data: ProposalSchemeUpdate,
+    db: Session = Depends(get_db),
+):
+    """Actualiza el contenido editable de un esquema de una propuesta."""
+    scheme = (
+        db.query(ProposalScheme)
+        .filter(
+            ProposalScheme.id == scheme_id,
+            ProposalScheme.proposal_id == proposal_id,
+        )
+        .first()
+    )
+    if not scheme:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Esquema {scheme_id} no encontrado en la propuesta {proposal_id}",
+        )
+
+    update_data = data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(scheme, field, value)
+
+    db.commit()
+    db.refresh(scheme)
+    return scheme
 
 
 @router.put("/{proposal_id}/products", response_model=List[ProposalProductRead])

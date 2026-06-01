@@ -15,8 +15,18 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 from fastapi import status
+from docx import Document as DocxReader
 
 from app.services.innti_service import InntiServiceError
+
+
+def _docx_text_from_zip_bytes(zip_bytes: bytes, scheme_keyword: str) -> str:
+    """Extrae todo el texto plano del .docx cuyo nombre contiene scheme_keyword."""
+    z = zipfile.ZipFile(io.BytesIO(zip_bytes))
+    name = next(n for n in z.namelist() if scheme_keyword in n and n.endswith(".docx"))
+    with z.open(name) as f:
+        doc = DocxReader(io.BytesIO(f.read()))
+    return "\n".join(p.text for p in doc.paragraphs)
 
 DOCX_MEDIA_TYPE = (
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -55,6 +65,52 @@ def _create_multi_scheme_proposal(client, sample_client_data, creator_headers) -
     p_res = client.post("/api/proposals/", json=p_data, headers=creator_headers)
     assert p_res.status_code == status.HTTP_201_CREATED
     return p_res.json()["id"]
+
+
+def _create_three_scheme_proposal(client, sample_client_data, creator_headers) -> dict:
+    """Crea una propuesta con 3 esquemas y contenido distintivo por esquema en la BD.
+
+    Devuelve el dict de la propuesta creada (con scheme ids para que el test
+    pueda editar el contenido posteriormente).
+    """
+    c_res = client.post("/api/clients/", json=sample_client_data)
+    client_id = c_res.json()["id"]
+    p_data = {
+        "title": "Propuesta tres esquemas Medellín",
+        "code": "TEST-MED",
+        "client_id": client_id,
+        "combine_schemes": False,
+        "products": [],
+        "schemes": [
+            {
+                "scheme_type": "licensing",
+                "payment_frequency": "unico",
+                "scope_content": "<p>ALCANCE-LICENSING-UNICO</p>",
+                "economic_conditions": "<p>VALOR-LIC-100M</p>",
+                "payment_terms": "<p>PAGO-LIC-50-50</p>",
+                "ip_section": "<p>IP-LIC-MARKER</p>",
+            },
+            {
+                "scheme_type": "services",
+                "payment_frequency": "mensual",
+                "scope_content": "<p>ALCANCE-SERVICES-MENSUAL</p>",
+                "economic_conditions": "<p>VALOR-SRV-MENSUAL</p>",
+                "payment_terms": "<p>PAGO-SRV-MENSUAL</p>",
+                "ip_section": "<p>IP-SRV-MARKER</p>",
+            },
+            {
+                "scheme_type": "support_maintenance",
+                "payment_frequency": "anual",
+                "scope_content": "<p>ALCANCE-SUPPORT-ANUAL</p>",
+                "economic_conditions": "<p>VALOR-SUP-ANUAL</p>",
+                "payment_terms": "<p>PAGO-SUP-ANUAL</p>",
+                "ip_section": "<p>IP-SUP-MARKER</p>",
+            },
+        ],
+    }
+    p_res = client.post("/api/proposals/", json=p_data, headers=creator_headers)
+    assert p_res.status_code == status.HTTP_201_CREATED
+    return p_res.json()
 
 
 # ── Tests: generate-document ─────────────────────────────────────────────────
@@ -104,7 +160,7 @@ def test_generate_pdf_conversion_error_returns_500(client, creator_headers, samp
     fake_docx = tmpdir / f"propuesta_{pid}.docx"
     fake_docx.write_bytes(b"PK\x03\x04")  # cabecera mínima de ZIP/DOCX
 
-    with patch("app.routers.documents._build_proposal_docx", return_value=fake_docx):
+    with patch("app.routers.documents._build_combined_docx", return_value=fake_docx):
         with patch("app.routers.documents.DocumentGenerator") as MockDocGen:
             MockDocGen.return_value.convert_docx_to_pdf.side_effect = Exception(
                 "WeasyPrint no disponible"
@@ -174,11 +230,13 @@ def test_generate_pdf_separate_returns_zip(client, creator_headers, sample_clien
     assert all(n.endswith(".pdf") for n in names)
 
 
-def test_generate_document_separate_single_scheme_returns_docx(
+def test_create_proposal_separate_with_single_scheme_rejected(
     client, creator_headers, sample_client_data, sample_proposal_data
 ):
-    """
-    Con combine_schemes=False pero solo 1 esquema, devuelve un .docx único (no ZIP).
+    """combine_schemes=False con un único esquema debe ser rechazado con 422.
+
+    No tiene sentido pedir "Documentos separados" si solo hay un esquema —
+    el validator de ProposalCreate lo rechaza explícitamente.
     """
     c_res = client.post("/api/clients/", json=sample_client_data)
     client_id = c_res.json()["id"]
@@ -189,7 +247,15 @@ def test_generate_document_separate_single_scheme_returns_docx(
         "schemes": [{"scheme_type": "licensing", "payment_frequency": "unico"}],
     }
     p_res = client.post("/api/proposals/", json=p_data, headers=creator_headers)
-    pid = p_res.json()["id"]
+    assert p_res.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert "combine_schemes" in p_res.text
+
+
+def test_generate_document_single_scheme_returns_docx(
+    client, creator_headers, sample_client_data, sample_proposal_data
+):
+    """Con un solo esquema, generate-document devuelve un .docx único (nunca ZIP)."""
+    pid = _create_proposal(client, sample_client_data, sample_proposal_data, creator_headers)
 
     with patch("app.routers.documents.PortfolioService") as MockPortfolio:
         MockPortfolio.return_value.get_by_names.return_value = []
@@ -254,6 +320,124 @@ def test_generate_document_separate_innti_per_scheme(client, creator_headers, sa
     assert "services" in economic_calls
 
 
+# ── Tests: contenido diferenciado por esquema (regresión del bug reportado) ──
+def test_separate_zip_contains_different_content_per_scheme(
+    client, creator_headers, sample_client_data
+):
+    """REGRESIÓN: el bug reportado era que el ZIP separado tenía N archivos
+    con contenido idéntico (solo cambiaba el nombre). Ahora cada .docx debe
+    incluir el contenido distintivo de su esquema (alcance, IP, pago).
+
+    Caso modelado en el PDF de la reunión (Consorcio MD Medellín).
+    """
+    proposal = _create_three_scheme_proposal(client, sample_client_data, creator_headers)
+    pid = proposal["id"]
+
+    with patch("app.routers.documents.PortfolioService") as MockPortfolio:
+        MockPortfolio.return_value.get_by_names.return_value = []
+        response = client.post(
+            f"/api/proposals/{pid}/generate-document",
+            params={"use_innti": False},
+        )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.headers["content-type"] == "application/zip"
+
+    text_lic = _docx_text_from_zip_bytes(response.content, "licenciamiento")
+    text_srv = _docx_text_from_zip_bytes(response.content, "servicios")
+    text_sup = _docx_text_from_zip_bytes(response.content, "soporte_mantenimiento")
+
+    # Cada documento contiene SU propio alcance, no el de los otros
+    assert "ALCANCE-LICENSING-UNICO" in text_lic
+    assert "ALCANCE-SERVICES-MENSUAL" not in text_lic
+    assert "ALCANCE-SUPPORT-ANUAL" not in text_lic
+
+    assert "ALCANCE-SERVICES-MENSUAL" in text_srv
+    assert "ALCANCE-LICENSING-UNICO" not in text_srv
+
+    assert "ALCANCE-SUPPORT-ANUAL" in text_sup
+    assert "ALCANCE-LICENSING-UNICO" not in text_sup
+
+    # Cada documento contiene SU propio IP, no el de los otros
+    assert "IP-LIC-MARKER" in text_lic
+    assert "IP-SRV-MARKER" not in text_lic
+    assert "IP-SRV-MARKER" in text_srv
+    assert "IP-SUP-MARKER" in text_sup
+
+    # Cada documento contiene SU propia forma de pago
+    assert "PAGO-LIC-50-50" in text_lic
+    assert "PAGO-SRV-MENSUAL" in text_srv
+    assert "PAGO-SUP-ANUAL" in text_sup
+
+
+def test_separate_zip_saas_omits_excluded_services_section(
+    client, creator_headers, sample_client_data
+):
+    """SaaS (services) no debe renderizar la sección "SERVICIOS EXCLUIDOS"
+    cuando no se ha provisto contenido — regla del PDF de la reunión.
+    """
+    c_res = client.post("/api/clients/", json=sample_client_data)
+    client_id = c_res.json()["id"]
+    p_data = {
+        "title": "Propuesta SaaS + Licensing",
+        "code": "TEST-SAAS",
+        "client_id": client_id,
+        "combine_schemes": False,
+        "products": [],
+        "schemes": [
+            {"scheme_type": "licensing", "payment_frequency": "unico"},
+            {"scheme_type": "services", "payment_frequency": "mensual"},
+        ],
+    }
+    p_res = client.post("/api/proposals/", json=p_data, headers=creator_headers)
+    pid = p_res.json()["id"]
+
+    with patch("app.routers.documents.PortfolioService") as MockPortfolio:
+        MockPortfolio.return_value.get_by_names.return_value = []
+        response = client.post(
+            f"/api/proposals/{pid}/generate-document",
+            params={"use_innti": False},
+        )
+
+    assert response.status_code == status.HTTP_200_OK
+    text_lic = _docx_text_from_zip_bytes(response.content, "licenciamiento")
+    text_srv = _docx_text_from_zip_bytes(response.content, "servicios")
+
+    # Licensing SÍ debe tener la sección de exclusiones (heading)
+    assert "SERVICIOS EXCLUIDOS" in text_lic.upper()
+    # SaaS NO debe tener esa sección
+    assert "SERVICIOS EXCLUIDOS" not in text_srv.upper()
+
+
+def test_combined_docx_contains_all_schemes(client, creator_headers, sample_client_data):
+    """Modo combinado: un único .docx debe contener un bloque por cada esquema."""
+    proposal = _create_three_scheme_proposal(client, sample_client_data, creator_headers)
+    pid = proposal["id"]
+    # Cambiar a combinado vía PATCH
+    client.patch(f"/api/proposals/{pid}", json={"combine_schemes": True})
+
+    with patch("app.routers.documents.PortfolioService") as MockPortfolio:
+        MockPortfolio.return_value.get_by_names.return_value = []
+        response = client.post(
+            f"/api/proposals/{pid}/generate-document",
+            params={"use_innti": False},
+        )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert "wordprocessingml" in response.headers["content-type"]
+
+    doc = DocxReader(io.BytesIO(response.content))
+    text = "\n".join(p.text for p in doc.paragraphs)
+    # Aparecen los 3 marcadores de esquema en un solo documento
+    assert "ESQUEMA: LICENCIAMIENTO" in text
+    assert "ESQUEMA: PRESTACIÓN DE SERVICIOS" in text
+    assert "ESQUEMA: SOPORTE Y MANTENIMIENTO" in text
+    # Y los IP de cada esquema están todos presentes
+    assert "IP-LIC-MARKER" in text
+    assert "IP-SRV-MARKER" in text
+    assert "IP-SUP-MARKER" in text
+
+
 # ── Tests: generate-annex ────────────────────────────────────────────────────
 def test_generate_annex_not_found(client):
     """Generar anexo técnico con propuesta inexistente → 404."""
@@ -283,7 +467,8 @@ def test_generate_document_innti_cover_letter_failure_uses_fallback(
 ):
     """
     Cuando generate_cover_letter lanza InntiServiceError se usa el template
-    de respaldo: letter_content queda NO vacío y las demás secciones se persisten.
+    de respaldo: letter_content queda NO vacío y las demás secciones se persisten
+    (las globales en Proposal, las por esquema en ProposalScheme).
     """
     pid = _create_proposal(client, sample_client_data, sample_proposal_data, creator_headers)
 
@@ -299,8 +484,6 @@ def test_generate_document_innti_cover_letter_failure_uses_fallback(
             mock_innti.generate_validity_section.return_value = "plazo generado"
             mock_innti.generate_economic_conditions_section.return_value = "condiciones"
             mock_innti.generate_payment_terms_section.return_value = "forma de pago"
-            mock_innti.generate_excluded_services_section.return_value = "excluidos"
-            mock_innti.generate_ip_section.return_value = "ip"
 
             response = client.post(
                 f"/api/proposals/{pid}/generate-document",
@@ -312,10 +495,7 @@ def test_generate_document_innti_cover_letter_failure_uses_fallback(
     updated = client.get(f"/api/proposals/{pid}")
     data = updated.json()
     assert data["context_content"] == "contexto generado", (
-        "context_content debe persistirse aunque cover_letter falle"
-    )
-    assert data["scope_content"] == "alcance generado", (
-        "scope_content debe persistirse aunque cover_letter falle"
+        "context_content (global) debe persistirse aunque cover_letter falle"
     )
     # Con el fallback, letter_content debe ser el template (no vacío)
     assert data["letter_content"], (
@@ -324,6 +504,11 @@ def test_generate_document_innti_cover_letter_failure_uses_fallback(
     assert "Juan Pablo Ramírez Madrid" in data["letter_content"], (
         "El template de respaldo debe incluir la firma del VP"
     )
+    # El contenido por esquema vive ahora en ProposalScheme
+    assert data["schemes"][0]["scope_content"] == "alcance generado", (
+        "scope_content debe persistirse en el esquema"
+    )
+    assert data["schemes"][0]["payment_terms"] == "forma de pago"
 
 
 def test_generate_document_innti_cover_letter_empty_uses_fallback(
@@ -368,9 +553,8 @@ def test_generate_document_innti_cover_letter_empty_uses_fallback(
 def test_generate_document_innti_all_sections_persisted(
     client, creator_headers, sample_client_data, sample_proposal_data
 ):
-    """
-    Cuando todas las llamadas Innti tienen éxito, TODAS las secciones
-    (incluida letter_content) se persisten en la BD.
+    """Con todas las llamadas Innti exitosas, secciones globales se persisten en Proposal
+    y secciones por esquema se persisten en cada ProposalScheme.
     """
     pid = _create_proposal(client, sample_client_data, sample_proposal_data, creator_headers)
 
@@ -386,8 +570,6 @@ def test_generate_document_innti_all_sections_persisted(
             mock_innti.generate_validity_section.return_value = "plazo"
             mock_innti.generate_economic_conditions_section.return_value = "condiciones"
             mock_innti.generate_payment_terms_section.return_value = "pago"
-            mock_innti.generate_excluded_services_section.return_value = "excluidos"
-            mock_innti.generate_ip_section.return_value = "ip"
 
             response = client.post(
                 f"/api/proposals/{pid}/generate-document",
@@ -399,7 +581,10 @@ def test_generate_document_innti_all_sections_persisted(
     updated = client.get(f"/api/proposals/{pid}")
     data = updated.json()
     assert data["context_content"] == "contexto"
-    assert data["scope_content"] == "alcance"
-    assert data["letter_content"] == "<p>Carta generada</p>", (
-        "letter_content debe persistirse cuando generate_cover_letter tiene éxito"
-    )
+    assert data["letter_content"] == "<p>Carta generada</p>"
+    # El contenido por esquema vive ahora en ProposalScheme
+    scheme = data["schemes"][0]
+    assert scheme["scope_content"] == "alcance"
+    assert scheme["validity_period"] == "plazo"
+    assert scheme["economic_conditions"] == "condiciones"
+    assert scheme["payment_terms"] == "pago"

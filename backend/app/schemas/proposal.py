@@ -1,7 +1,7 @@
 """
 Schemas Pydantic para validación de datos de Propuesta.
 """
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 from datetime import datetime
 from typing import Optional, List
 
@@ -31,9 +31,31 @@ class ProposalProductRead(BaseModel):
 
 # --- Esquemas en Propuesta ---
 class ProposalSchemeCreate(BaseModel):
-    """Schema para seleccionar un esquema."""
+    """Schema para seleccionar un esquema (al crear la propuesta).
+
+    El contenido editable (scope, validity, etc.) es opcional al crear;
+    si no se provee, queda vacío y se rellena posteriormente con el editor
+    o con Innti.
+    """
     scheme_type: SchemeType
     payment_frequency: Optional[str] = None
+    scope_content: Optional[str] = None
+    validity_period: Optional[str] = None
+    economic_conditions: Optional[str] = None
+    payment_terms: Optional[str] = None
+    excluded_services: Optional[str] = None
+    ip_section: Optional[str] = None
+
+
+class ProposalSchemeUpdate(BaseModel):
+    """Schema para editar el contenido de un esquema existente."""
+    payment_frequency: Optional[str] = None
+    scope_content: Optional[str] = None
+    validity_period: Optional[str] = None
+    economic_conditions: Optional[str] = None
+    payment_terms: Optional[str] = None
+    excluded_services: Optional[str] = None
+    ip_section: Optional[str] = None
 
 
 class ProposalSchemeRead(BaseModel):
@@ -41,6 +63,12 @@ class ProposalSchemeRead(BaseModel):
     id: int
     scheme_type: SchemeType
     payment_frequency: Optional[str] = None
+    scope_content: Optional[str] = None
+    validity_period: Optional[str] = None
+    economic_conditions: Optional[str] = None
+    payment_terms: Optional[str] = None
+    excluded_services: Optional[str] = None
+    ip_section: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -55,19 +83,22 @@ class ProposalCreate(BaseModel):
     products: List[ProposalProductCreate] = []
     schemes: List[ProposalSchemeCreate] = []
 
+    @model_validator(mode="after")
+    def _validate_combine_vs_schemes(self) -> "ProposalCreate":
+        if not self.combine_schemes and len(self.schemes) < 2:
+            raise ValueError(
+                "combine_schemes=False requiere al menos 2 esquemas — "
+                "no tiene sentido pedir 'Documentos separados' con un único esquema."
+            )
+        return self
+
 
 class ProposalUpdate(BaseModel):
-    """Schema para actualizar una propuesta (edición de contenido)."""
+    """Schema para actualizar el contenido global de una propuesta."""
     title: Optional[str] = None
     cover_title: Optional[str] = None
     letter_content: Optional[str] = None
     context_content: Optional[str] = None
-    scope_content: Optional[str] = None
-    validity_period: Optional[str] = None
-    economic_conditions: Optional[str] = None
-    payment_terms: Optional[str] = None
-    excluded_services: Optional[str] = None
-    ip_section: Optional[str] = None
     confidentiality: Optional[str] = None
     combine_schemes: Optional[bool] = None
 
@@ -82,12 +113,6 @@ class ProposalRead(BaseModel):
     cover_title: Optional[str] = None
     letter_content: Optional[str] = None
     context_content: Optional[str] = None
-    scope_content: Optional[str] = None
-    validity_period: Optional[str] = None
-    economic_conditions: Optional[str] = None
-    payment_terms: Optional[str] = None
-    excluded_services: Optional[str] = None
-    ip_section: Optional[str] = None
     confidentiality: Optional[str] = None
     client_id: int
     products: List[ProposalProductRead] = []
