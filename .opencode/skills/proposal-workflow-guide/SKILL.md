@@ -54,21 +54,27 @@ Flujo de usuario completo para crear y gestionar propuestas en Innti Propuestas.
 
 **Ubicación UI:** ProposalEditor → TipTap rich text editor
 
-El editor tiene **8 pestañas**. Comportamiento por pestaña:
+El editor tiene **8 pestañas**, divididas en dos grupos:
 
+**Pestañas globales (1 sola versión para toda la propuesta):**
 | Pestaña | Campo | Editable | Generada por |
 |---------|-------|----------|--------------|
-| Contexto | `context_content` | ✅ Sí | Innti (editable post-gen) |
-| Alcance | `scope_content` | ✅ Sí | Innti (editable post-gen) |
-| **Plazo** | `validity_period` | ✅ Sí | Texto por defecto (editable) |
-| Condiciones Económicas | `economic_conditions` | ✅ Sí | Manual (obligatorio) |
-| Forma de Pago | `payment_terms` | ✅ Sí | Manual (obligatorio) |
-| Servicios Excluidos | `excluded_services` | ✅ Sí | Lista fija de 10 items (editable) |
-| Propiedad Intelectual | `ip_section` | ✅ Sí | Texto fijo con nombre cliente (editable) |
-| Carta de Presentación | `letter_content` | ❌ Solo lectura | Innti (banner amarillo ⚠️) |
+| Contexto | `Proposal.context_content` | ✅ Sí | Innti (editable post-gen) |
+| Carta de Presentación | `Proposal.letter_content` | ❌ Solo lectura | Innti (banner amarillo ⚠️) |
 
-> El botón **Guardar** persiste todos los campos mediante `PATCH /api/proposals/{id}`.
-> Funciona desde cualquier pestaña (incluso estando en Carta de Presentación).
+**Pestañas por esquema (1 versión por cada esquema seleccionado):**
+| Pestaña | Campo | Editable | Generada por |
+|---------|-------|----------|--------------|
+| Alcance | `ProposalScheme.scope_content` | ✅ Sí | Innti por esquema (editable post-gen) |
+| Plazo | `ProposalScheme.validity_period` | ✅ Sí | Texto por defecto por esquema (editable) |
+| Condiciones Económicas | `ProposalScheme.economic_conditions` | ✅ Sí | Manual (obligatorio por esquema) |
+| Forma de Pago | `ProposalScheme.payment_terms` | ✅ Sí | Manual (obligatorio por esquema) |
+| Servicios Excluidos | `ProposalScheme.excluded_services` | ✅ Sí | Default por esquema (vacío para SaaS) |
+| Propiedad Intelectual | `ProposalScheme.ip_section` | ✅ Sí | Default por esquema (varía por tipo) |
+
+> Cuando hay ≥ 2 esquemas, sobre el editor aparece un selector "Esquema: [Licenciamiento] [Servicios] [Soporte]" que permite cambiar entre las versiones por esquema. Las pestañas globales no muestran este selector.
+
+> El botón **Guardar** persiste cambios globales vía `PATCH /api/proposals/{id}` y cambios por esquema vía `PATCH /api/proposals/{id}/schemes/{scheme_id}`. Funciona desde cualquier pestaña/sub-tab.
 
 **Referencia:** Skill `document-generation` para textos fijos
 

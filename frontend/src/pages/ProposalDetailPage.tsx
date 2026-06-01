@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { proposalApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -106,8 +106,6 @@ const ProposalDetailPage: React.FC = () => {
       const blob = new Blob([response.data], { type: mimeType })
       const url = window.URL.createObjectURL(blob)
 
-      // Usar <a download> en lugar de window.open para garantizar la descarga
-      // sin que los bloqueadores de popups interfieran.
       const anchor = document.createElement('a')
       anchor.href = url
       anchor.download = filename
@@ -115,6 +113,14 @@ const ProposalDetailPage: React.FC = () => {
       anchor.click()
       document.body.removeChild(anchor)
       window.URL.revokeObjectURL(url)
+
+      // UX: avisar al usuario cuando se descarga un ZIP con N documentos separados.
+      if (isZip) {
+        const count = proposal.schemes.length
+        alert(
+          `Se generaron ${count} documentos separados (uno por esquema) y se empaquetaron en ${filename}.`
+        )
+      }
     } catch (err) {
       console.error(`Error generating ${type}:`, err)
       alert(`Error al generar el documento ${type}.`)
@@ -138,18 +144,9 @@ const ProposalDetailPage: React.FC = () => {
       setApprovals(approvalsRes.data)
       setProposalVersion(v => v + 1)
 
-      // Llamada imperativa directa: actualiza el editor con datos frescos sin
-      // depender de la cadena reactiva memo→prop→effect.
-      editorRef.current?.refreshContent({
-        context_content: proposalRes.data.context_content || '',
-        scope_content: proposalRes.data.scope_content || '',
-        validity_period: proposalRes.data.validity_period || '',
-        economic_conditions: proposalRes.data.economic_conditions || '',
-        payment_terms: proposalRes.data.payment_terms || '',
-        excluded_services: proposalRes.data.excluded_services || '',
-        ip_section: proposalRes.data.ip_section || '',
-        letter_content: proposalRes.data.letter_content || '',
-      })
+      // Pasamos la propuesta completa: el editor extrae los campos globales
+      // de proposalRes.data y los por esquema de proposalRes.data.schemes[*].
+      editorRef.current?.refreshContent(proposalRes.data)
 
       alert('Contenido generado con Innti exitosamente.')
     } catch (err) {
@@ -365,16 +362,21 @@ const ProposalDetailPage: React.FC = () => {
     }
   }
 
-  const editorInitialContent = useMemo(() => ({
-    context_content: proposal?.context_content || '',
-    scope_content: proposal?.scope_content || '',
-    validity_period: proposal?.validity_period || '',
-    economic_conditions: proposal?.economic_conditions || '',
-    payment_terms: proposal?.payment_terms || '',
-    excluded_services: proposal?.excluded_services || '',
-    ip_section: proposal?.ip_section || '',
-    letter_content: proposal?.letter_content || '',
-  }), [proposal?.id, proposalVersion]) // eslint-disable-line react-hooks/exhaustive-deps
+  const handleToggleCombineSchemes = async () => {
+    if (!proposal) return
+    if (proposal.schemes.length < 2) {
+      alert('La opción "Documentos separados" requiere 2 o más esquemas.')
+      return
+    }
+    const next = !proposal.combine_schemes
+    try {
+      const res = await proposalApi.update(proposal.id, { combine_schemes: next })
+      setProposal(res.data)
+    } catch (err) {
+      console.error('Error toggling combine_schemes:', err)
+      alert('No se pudo cambiar la configuración de documentos.')
+    }
+  }
 
   if (isLoading) {
     return (
@@ -413,9 +415,8 @@ const ProposalDetailPage: React.FC = () => {
         <div className="lg:col-span-3 space-y-6">
           <ProposalEditor
             ref={editorRef}
-            key={proposal.id}
-            proposalId={proposal.id}
-            initialContent={editorInitialContent}
+            key={`${proposal.id}-${proposalVersion}`}
+            proposal={proposal}
           />
 
           {/* Historial de Aprobaciones */}
@@ -499,6 +500,40 @@ const ProposalDetailPage: React.FC = () => {
                 {isGenerating === 'annex' && <span className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full"></span>}
               </button>
             </div>
+          </div>
+
+          <div className="bg-white p-4 rounded-lg shadow border">
+            <h4 className="text-sm font-semibold text-gray-900 mb-3">Configuración de Documentos</h4>
+            {proposal.schemes.length < 2 ? (
+              <p className="text-xs text-gray-500 italic">
+                Selecciona 2 o más esquemas al crear la propuesta para habilitar la opción "Documentos separados".
+              </p>
+            ) : (
+              <div className="flex items-center bg-gray-50 p-1 rounded-lg border border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => proposal.combine_schemes ? undefined : handleToggleCombineSchemes()}
+                  className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                    proposal.combine_schemes
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-gray-600 hover:text-blue-600'
+                  }`}
+                >
+                  Combinar en uno
+                </button>
+                <button
+                  type="button"
+                  onClick={() => !proposal.combine_schemes ? undefined : handleToggleCombineSchemes()}
+                  className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                    !proposal.combine_schemes
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-gray-600 hover:text-blue-600'
+                  }`}
+                >
+                  Documentos separados
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">

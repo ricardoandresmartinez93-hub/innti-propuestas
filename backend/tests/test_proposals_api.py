@@ -44,8 +44,8 @@ def test_create_proposal_requires_auth(client, sample_proposal_data):
     response = client.post("/api/proposals/", json=proposal_data)
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-def test_update_proposal_content(client, creator_headers, sample_client_data, sample_proposal_data):
-    """PATCH para editar condiciones económicas."""
+def test_update_proposal_global_content(client, creator_headers, sample_client_data, sample_proposal_data):
+    """PATCH para editar contenido GLOBAL (carta, contexto, confidencialidad)."""
     client_res = client.post("/api/clients/", json=sample_client_data)
     client_id = client_res.json()["id"]
     proposal_data = sample_proposal_data.copy()
@@ -54,15 +54,58 @@ def test_update_proposal_content(client, creator_headers, sample_client_data, sa
     proposal_id = prop_res.json()["id"]
 
     update_data = {
-        "economic_conditions": "<p>Nuevas condiciones 2024</p>",
-        "payment_terms": "Contado"
+        "context_content": "<p>Contexto actualizado 2026</p>",
+        "letter_content": "<p>Carta personalizada</p>",
     }
     response = client.patch(f"/api/proposals/{proposal_id}", json=update_data)
     assert response.status_code == status.HTTP_200_OK
 
     data = response.json()
+    assert data["context_content"] == update_data["context_content"]
+    assert data["letter_content"] == update_data["letter_content"]
+
+
+def test_update_proposal_scheme_content(client, creator_headers, sample_client_data, sample_proposal_data):
+    """PATCH /api/proposals/{id}/schemes/{scheme_id} edita contenido POR esquema."""
+    client_res = client.post("/api/clients/", json=sample_client_data)
+    client_id = client_res.json()["id"]
+    proposal_data = sample_proposal_data.copy()
+    proposal_data["client_id"] = client_id
+    prop_res = client.post("/api/proposals/", json=proposal_data, headers=creator_headers)
+    proposal = prop_res.json()
+    proposal_id = proposal["id"]
+    scheme_id = proposal["schemes"][0]["id"]
+
+    update_data = {
+        "economic_conditions": "<p>Nuevas condiciones 2026</p>",
+        "payment_terms": "Contado",
+        "ip_section": "<p>IP personalizada para este esquema</p>",
+    }
+    response = client.patch(
+        f"/api/proposals/{proposal_id}/schemes/{scheme_id}",
+        json=update_data,
+    )
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
     assert data["economic_conditions"] == update_data["economic_conditions"]
     assert data["payment_terms"] == update_data["payment_terms"]
+    assert data["ip_section"] == update_data["ip_section"]
+
+
+def test_update_scheme_unknown_returns_404(client, creator_headers, sample_client_data, sample_proposal_data):
+    """PATCH a un esquema inexistente devuelve 404."""
+    client_res = client.post("/api/clients/", json=sample_client_data)
+    client_id = client_res.json()["id"]
+    proposal_data = sample_proposal_data.copy()
+    proposal_data["client_id"] = client_id
+    prop_res = client.post("/api/proposals/", json=proposal_data, headers=creator_headers)
+    proposal_id = prop_res.json()["id"]
+
+    response = client.patch(
+        f"/api/proposals/{proposal_id}/schemes/99999",
+        json={"payment_terms": "X"},
+    )
+    assert response.status_code == status.HTTP_404_NOT_FOUND
 
 def test_delete_proposal(client, creator_headers, sample_client_data, sample_proposal_data):
     """Eliminar propuesta en DRAFT."""
