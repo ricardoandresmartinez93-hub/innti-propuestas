@@ -18,7 +18,17 @@ export default function LoginPage() {
       await login(email, password)
       navigate('/proposals')
     } catch (err: unknown) {
-      setError('Credenciales incorrectas. Verifica tu email y contraseña.')
+      const detail =
+        err !== null &&
+        typeof err === 'object' &&
+        'response' in err
+          ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+          : undefined
+      if (detail === 'Usuario inactivo') {
+        setError('Usuario inactivo. Contacta al administrador.')
+      } else {
+        setError('Credenciales incorrectas. Verifica tu email y contraseña.')
+      }
     } finally {
       setIsLoading(false)
     }

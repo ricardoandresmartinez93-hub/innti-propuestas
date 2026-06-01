@@ -19,6 +19,19 @@ def test_user(db_session):
     return user
 
 @pytest.fixture
+def inactive_user(db_session):
+    user = User(
+        full_name="Inactive User",
+        email="inactive@example.com",
+        hashed_password=get_password_hash("pass"),
+        role=UserRole.creator,
+        is_active=False
+    )
+    db_session.add(user)
+    db_session.commit()
+    return user
+
+@pytest.fixture
 def approver_user(db_session):
     user = User(
         full_name="Approver User",
@@ -46,6 +59,14 @@ def test_login_wrong_password(test_user, client):
     )
     assert response.status_code == 401
     assert response.json()["detail"] == "Credenciales incorrectas"
+
+def test_login_inactive_user(inactive_user, client):
+    response = client.post(
+        "/api/auth/login",
+        json={"email": "inactive@example.com", "password": "pass"}
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Usuario inactivo"
 
 def test_login_nonexistent_user(client):
     response = client.post(
