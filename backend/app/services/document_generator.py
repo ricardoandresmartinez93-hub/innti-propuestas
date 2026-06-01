@@ -4,55 +4,460 @@ Genera propuestas comerciales y anexos técnicos con la estructura estándar de 
 """
 import re
 from datetime import date
+from html.parser import HTMLParser
+from html import unescape
 from pathlib import Path
 from typing import List, Optional
 from docx import Document
 from docx.shared import Inches, Pt, Cm, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
+from docx.enum.text import WD_COLOR_INDEX
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
 from app.services.portfolio_service import PortfolioProduct
 
 
-def _add_html_paragraphs(doc: Document, html_text: str) -> None:
-    """Convierte HTML de TipTap en párrafos Word individuales.
+# ---------------------------------------------------------------------------
+# HTML → docx: helpers de bajo nivel
+# ---------------------------------------------------------------------------
 
-    Cada <p> / <br> se convierte en un párrafo separado, preservando la
-    estructura de texto que el usuario vio en el editor.
-    Párrafos completamente vacíos consecutivos se comprimen a uno solo para
-    evitar espaciado excesivo.
+# Mapa color hex (aproximado) → highlight index de Word.
+# WD_COLOR_INDEX solo soporta una paleta cerrada; mapeamos por familia.
+_HEX_TO_HIGHLIGHT = {
+    "ffff00": WD_COLOR_INDEX.YELLOW,
+    "00ff00": WD_COLOR_INDEX.BRIGHT_GREEN,
+    "00ffff": WD_COLOR_INDEX.TURQUOISE,
+    "ff00ff": WD_COLOR_INDEX.PINK,
+    "0000ff": WD_COLOR_INDEX.BLUE,
+    "ff0000": WD_COLOR_INDEX.RED,
+    "000080": WD_COLOR_INDEX.DARK_BLUE,
+    "008080": WD_COLOR_INDEX.TEAL,
+    "008000": WD_COLOR_INDEX.GREEN,
+    "800080": WD_COLOR_INDEX.VIOLET,
+    "800000": WD_COLOR_INDEX.DARK_RED,
+    "808000": WD_COLOR_INDEX.DARK_YELLOW,
+    "808080": WD_COLOR_INDEX.GRAY_50,
+    "c0c0c0": WD_COLOR_INDEX.GRAY_25,
+    "000000": WD_COLOR_INDEX.BLACK,
+}
+
+_ALIGN_MAP = {
+    "left": WD_ALIGN_PARAGRAPH.LEFT,
+    "center": WD_ALIGN_PARAGRAPH.CENTER,
+    "right": WD_ALIGN_PARAGRAPH.RIGHT,
+    "justify": WD_ALIGN_PARAGRAPH.JUSTIFY,
+}
+
+
+def _parse_style(style: str) -> dict:
+    """Parsea una declaración CSS inline en un dict {prop: value}."""
+    result: dict = {}
+    if not style:
+        return result
+    for decl in style.split(";"):
+        if ":" not in decl:
+            continue
+        prop, _, value = decl.partition(":")
+        result[prop.strip().lower()] = value.strip()
+    return result
+
+
+def _normalize_hex(value: str) -> Optional[str]:
+    """Normaliza colores `#rgb` / `#rrggbb` a 6 dígitos en minúsculas. Devuelve None si inválido."""
+    if not value:
+        return None
+    value = value.strip().lstrip("#").lower()
+    if re.fullmatch(r"[0-9a-f]{3}", value):
+        value = "".join(c * 2 for c in value)
+    if re.fullmatch(r"[0-9a-f]{6}", value):
+        return value
+    return None
+
+
+def _closest_highlight(hex_color: str) -> WD_COLOR_INDEX:
+    """Devuelve el highlight Word más cercano al hex dado (por distancia euclídea RGB)."""
+    if hex_color in _HEX_TO_HIGHLIGHT:
+        return _HEX_TO_HIGHLIGHT[hex_color]
+    try:
+        r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+    except ValueError:
+        return WD_COLOR_INDEX.YELLOW
+    best = WD_COLOR_INDEX.YELLOW
+    best_dist = float("inf")
+    for hx, idx in _HEX_TO_HIGHLIGHT.items():
+        rr, gg, bb = int(hx[0:2], 16), int(hx[2:4], 16), int(hx[4:6], 16)
+        dist = (r - rr) ** 2 + (g - gg) ** 2 + (b - bb) ** 2
+        if dist < best_dist:
+            best_dist = dist
+            best = idx
+    return best
+
+
+def _add_hyperlink(paragraph, url: str, text: str, marks: dict) -> None:
+    """Inserta un hyperlink en el párrafo aplicando las marcas activas.
+
+    python-docx no expone hyperlinks de forma directa, por lo que se construye
+    el elemento OOXML `w:hyperlink` manualmente.
+    """
+    part = paragraph.part
+    r_id = part.relate_to(
+        url,
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
+        is_external=True,
+    )
+    hyperlink = OxmlElement("w:hyperlink")
+    hyperlink.set(qn("r:id"), r_id)
+
+    run = OxmlElement("w:r")
+    rpr = OxmlElement("w:rPr")
+
+    # Estilo "Hyperlink" si existe (azul + subrayado por defecto).
+    style = OxmlElement("w:rStyle")
+    style.set(qn("w:val"), "Hyperlink")
+    rpr.append(style)
+
+    # Color azul siempre (por encima de cualquier color textual del run).
+    color = OxmlElement("w:color")
+    color.set(qn("w:val"), "0000FF")
+    rpr.append(color)
+
+    # Marca de subrayado si la activa el usuario o por estilo del link.
+    u = OxmlElement("w:u")
+    u.set(qn("w:val"), "single")
+    rpr.append(u)
+
+    if marks.get("bold"):
+        rpr.append(OxmlElement("w:b"))
+    if marks.get("italic"):
+        rpr.append(OxmlElement("w:i"))
+    if marks.get("strike"):
+        rpr.append(OxmlElement("w:strike"))
+
+    run.append(rpr)
+    t = OxmlElement("w:t")
+    t.set(qn("xml:space"), "preserve")
+    t.text = text
+    run.append(t)
+    hyperlink.append(run)
+    paragraph._p.append(hyperlink)
+
+
+def _add_horizontal_rule(doc: Document) -> None:
+    """Inserta una línea horizontal (border-bottom en un párrafo vacío)."""
+    p = doc.add_paragraph()
+    pPr = p._p.get_or_add_pPr()
+    pBdr = OxmlElement("w:pBdr")
+    bottom = OxmlElement("w:bottom")
+    bottom.set(qn("w:val"), "single")
+    bottom.set(qn("w:sz"), "6")
+    bottom.set(qn("w:space"), "1")
+    bottom.set(qn("w:color"), "auto")
+    pBdr.append(bottom)
+    pPr.append(pBdr)
+
+
+# ---------------------------------------------------------------------------
+# Parser HTML → docx
+# ---------------------------------------------------------------------------
+
+_BLOCK_TAGS = {"p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "pre"}
+_INLINE_MARKS = {"strong", "b", "em", "i", "u", "s", "del", "sup", "sub", "mark", "code"}
+
+
+class _HtmlToDocxParser(HTMLParser):
+    """Recorre HTML de TipTap y emite contenido a un Document de python-docx.
+
+    Mantiene una pila de marcas inline (`_marks_stack`) cuyas marcas se aplican
+    al run actual. Los bloques (p, h*, li, blockquote, pre) abren un nuevo párrafo.
+    """
+
+    def __init__(self, doc: Document) -> None:
+        super().__init__(convert_charrefs=False)
+        self.doc = doc
+        # Pila de marcas inline acumuladas. Cada entrada es un dict.
+        self._marks_stack: List[dict] = []
+        # Pila de contenedores de lista: cada entrada es "ul" o "ol".
+        self._list_stack: List[str] = []
+        # Párrafo en construcción (None entre bloques).
+        self._current_paragraph = None
+        # Estilo de párrafo pendiente para el siguiente bloque (p.ej. "Quote").
+        self._pending_block_style: Optional[str] = None
+        # Alineación pendiente para el siguiente párrafo.
+        self._pending_alignment = None
+        # Hyperlink activo (URL) si estamos dentro de un <a>.
+        self._link_href: Optional[str] = None
+        # Buffer de texto plano del run actual.
+        self._text_buffer: str = ""
+
+    # ----- helpers de marcas -------------------------------------------------
+
+    def _current_marks(self) -> dict:
+        """Combina la pila de marcas en un único dict."""
+        merged: dict = {}
+        for layer in self._marks_stack:
+            merged.update({k: v for k, v in layer.items() if v is not None})
+        return merged
+
+    def _push_marks(self, marks: dict) -> None:
+        self._flush_text()
+        self._marks_stack.append(marks)
+
+    def _pop_marks(self) -> None:
+        self._flush_text()
+        if self._marks_stack:
+            self._marks_stack.pop()
+
+    # ----- helpers de párrafo ------------------------------------------------
+
+    def _ensure_paragraph(self) -> None:
+        if self._current_paragraph is not None:
+            return
+        if self._list_stack and self._list_stack[-1] == "ol":
+            style = "List Number"
+        elif self._list_stack and self._list_stack[-1] == "ul":
+            style = "List Bullet"
+        else:
+            style = self._pending_block_style or None
+        self._current_paragraph = (
+            self.doc.add_paragraph(style=style) if style else self.doc.add_paragraph()
+        )
+        if self._pending_alignment is not None:
+            self._current_paragraph.alignment = self._pending_alignment
+        self._pending_block_style = None
+        self._pending_alignment = None
+
+    def _close_paragraph(self) -> None:
+        self._flush_text()
+        self._current_paragraph = None
+
+    def _flush_text(self) -> None:
+        """Empuja el buffer de texto como un run con las marcas activas."""
+        if not self._text_buffer:
+            return
+        text = self._text_buffer
+        self._text_buffer = ""
+        self._ensure_paragraph()
+        marks = self._current_marks()
+        if self._link_href:
+            _add_hyperlink(self._current_paragraph, self._link_href, text, marks)
+            return
+        run = self._current_paragraph.add_run(text)
+        if marks.get("bold"):
+            run.bold = True
+        if marks.get("italic"):
+            run.italic = True
+        if marks.get("underline"):
+            run.underline = True
+        if marks.get("strike"):
+            run.font.strike = True
+        if marks.get("superscript"):
+            run.font.superscript = True
+        if marks.get("subscript"):
+            run.font.subscript = True
+        if marks.get("code"):
+            run.font.name = "Consolas"
+        color_hex = marks.get("color")
+        if color_hex:
+            try:
+                run.font.color.rgb = RGBColor.from_string(color_hex.upper())
+            except (ValueError, AttributeError):
+                pass
+        highlight_hex = marks.get("highlight")
+        if highlight_hex:
+            run.font.highlight_color = _closest_highlight(highlight_hex)
+
+    # ----- HTMLParser callbacks ---------------------------------------------
+
+    def handle_starttag(self, tag: str, attrs):  # type: ignore[override]
+        tag = tag.lower()
+        attr_dict = {k.lower(): (v or "") for k, v in attrs}
+        style = _parse_style(attr_dict.get("style", ""))
+
+        if tag == "br":
+            # Salto de línea dentro del párrafo actual.
+            self._flush_text()
+            self._ensure_paragraph()
+            self._current_paragraph.add_run().add_break()
+            return
+
+        if tag == "hr":
+            self._close_paragraph()
+            _add_horizontal_rule(self.doc)
+            return
+
+        if tag in {"ul", "ol"}:
+            self._close_paragraph()
+            self._list_stack.append(tag)
+            return
+
+        if tag == "li":
+            self._close_paragraph()
+            # _ensure_paragraph aplicará el estilo correcto según _list_stack.
+            self._ensure_paragraph()
+            return
+
+        if tag in {"h1", "h2", "h3", "h4", "h5", "h6"}:
+            self._close_paragraph()
+            level = int(tag[1])
+            self._current_paragraph = self.doc.add_heading("", level=level)
+            align = style.get("text-align")
+            if align in _ALIGN_MAP:
+                self._current_paragraph.alignment = _ALIGN_MAP[align]
+            return
+
+        if tag == "p":
+            self._close_paragraph()
+            align = style.get("text-align")
+            if align in _ALIGN_MAP:
+                self._pending_alignment = _ALIGN_MAP[align]
+            return
+
+        if tag == "blockquote":
+            self._close_paragraph()
+            self._pending_block_style = "Quote"
+            return
+
+        if tag == "pre":
+            self._close_paragraph()
+            self._pending_block_style = "No Spacing"
+            self._push_marks({"code": True})
+            return
+
+        if tag == "a":
+            self._flush_text()
+            self._link_href = attr_dict.get("href") or None
+            self._push_marks({})  # capa vacía para que pop simétrico funcione
+            return
+
+        # ----- marcas inline -----
+        if tag in {"strong", "b"}:
+            self._push_marks({"bold": True})
+            return
+        if tag in {"em", "i"}:
+            self._push_marks({"italic": True})
+            return
+        if tag == "u":
+            self._push_marks({"underline": True})
+            return
+        if tag in {"s", "del"}:
+            self._push_marks({"strike": True})
+            return
+        if tag == "sup":
+            self._push_marks({"superscript": True})
+            return
+        if tag == "sub":
+            self._push_marks({"subscript": True})
+            return
+        if tag == "code":
+            self._push_marks({"code": True})
+            return
+        if tag == "mark":
+            hex_color = _normalize_hex(style.get("background-color", "ffff00"))
+            self._push_marks({"highlight": hex_color or "ffff00"})
+            return
+        if tag == "span":
+            layer: dict = {}
+            color = _normalize_hex(style.get("color", ""))
+            if color:
+                layer["color"] = color
+            bg = _normalize_hex(style.get("background-color", ""))
+            if bg:
+                layer["highlight"] = bg
+            self._push_marks(layer)
+            return
+
+        # Tags desconocidos: empujar capa vacía para mantener simetría con endtag.
+        self._push_marks({})
+
+    def handle_endtag(self, tag: str):  # type: ignore[override]
+        tag = tag.lower()
+        if tag in {"br", "hr"}:
+            return
+
+        if tag in {"ul", "ol"}:
+            self._close_paragraph()
+            if self._list_stack:
+                self._list_stack.pop()
+            return
+
+        if tag == "li":
+            self._close_paragraph()
+            return
+
+        if tag in {"p", "blockquote"} or tag in {"h1", "h2", "h3", "h4", "h5", "h6"}:
+            self._close_paragraph()
+            return
+
+        if tag == "pre":
+            self._pop_marks()  # cierra la marca "code" abierta
+            self._close_paragraph()
+            return
+
+        if tag == "a":
+            self._flush_text()
+            self._link_href = None
+            self._pop_marks()
+            return
+
+        # Marcas inline conocidas y desconocidas: pop simétrico
+        if tag in _INLINE_MARKS or tag == "span":
+            self._pop_marks()
+            return
+
+        self._pop_marks()
+
+    def handle_startendtag(self, tag: str, attrs):  # type: ignore[override]
+        # <br/>, <hr/> auto-cerrados
+        tag = tag.lower()
+        if tag == "br":
+            self._flush_text()
+            self._ensure_paragraph()
+            self._current_paragraph.add_run().add_break()
+            return
+        if tag == "hr":
+            self._close_paragraph()
+            _add_horizontal_rule(self.doc)
+            return
+        # Otros auto-cerrados: tratar como start+end vacíos
+        self.handle_starttag(tag, attrs)
+        self.handle_endtag(tag)
+
+    def handle_data(self, data: str):  # type: ignore[override]
+        self._text_buffer += data
+
+    def handle_entityref(self, name: str):  # type: ignore[override]
+        self._text_buffer += unescape(f"&{name};")
+
+    def handle_charref(self, name: str):  # type: ignore[override]
+        self._text_buffer += unescape(f"&#{name};")
+
+    def finalize(self) -> None:
+        self._close_paragraph()
+
+
+def _add_html_paragraphs(doc: Document, html_text: str) -> None:
+    """Convierte HTML de TipTap en contenido Word preservando formato.
+
+    Las marcas de TipTap (negrita, cursiva, subrayado, tachado, super/subíndice,
+    color, resaltado, enlaces, alineación, citas, líneas horizontales y listas)
+    se mapean a runs/párrafos de python-docx. Texto sin etiquetas se inserta
+    como un único párrafo.
     """
     if not html_text:
         return
 
-    # Si contiene <li>, manejar como lista
-    if '<li>' in html_text.lower():
-        lines = html_text.split('<li>')
-        for i, line in enumerate(lines):
-            if i == 0: # Texto antes de la primera viñeta
-                content = _strip_html(line).strip()
-                if content:
-                    doc.add_paragraph(content)
-                continue
-            
-            # Contenido de la viñeta
-            content = _strip_html(line.split('</li>')[0]).strip()
-            if content:
-                doc.add_paragraph(content, style="List Bullet")
+    # Si el contenido no contiene tags, insertarlo como párrafo plano
+    # (caso común de campos legacy en la BD).
+    if "<" not in html_text:
+        plain = html_text.strip()
+        if plain:
+            doc.add_paragraph(plain)
         return
 
-    plain = _strip_html(html_text)
-    lines = plain.split('\n')
-    prev_empty = False
-    for line in lines:
-        stripped = line.strip()
-        if stripped:
-            doc.add_paragraph(stripped)
-            prev_empty = False
-        elif not prev_empty:
-            doc.add_paragraph('')
-            prev_empty = True
+    parser = _HtmlToDocxParser(doc)
+    parser.feed(html_text)
+    parser.finalize()
 
 
 def _has_content(html: Optional[str]) -> bool:

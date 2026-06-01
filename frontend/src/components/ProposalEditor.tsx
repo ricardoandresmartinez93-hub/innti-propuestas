@@ -5,6 +5,14 @@ import Table from '@tiptap/extension-table'
 import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
+import Underline from '@tiptap/extension-underline'
+import Link from '@tiptap/extension-link'
+import TextAlign from '@tiptap/extension-text-align'
+import Highlight from '@tiptap/extension-highlight'
+import { Color } from '@tiptap/extension-color'
+import TextStyle from '@tiptap/extension-text-style'
+import Superscript from '@tiptap/extension-superscript'
+import Subscript from '@tiptap/extension-subscript'
 import { proposalApi } from '../services/api'
 import type { Proposal, ProposalScheme, SchemeType } from '../types'
 import { SCHEME_LABELS } from '../types'
@@ -86,48 +94,268 @@ const MenuBar = ({ editor }: { editor: Editor | null }) => {
       active ? 'bg-blue-600 text-white' : 'bg-white border'
     }`
 
+  // Prompt URL for link; empty input removes the link.
+  const handleLink = () => {
+    const previous = editor.getAttributes('link').href as string | undefined
+    const url = window.prompt('URL del enlace (vacío para quitar):', previous ?? '')
+    if (url === null) return
+    if (url === '') {
+      editor.chain().focus().extendMarkRange('link').unsetLink().run()
+      return
+    }
+    editor
+      .chain()
+      .focus()
+      .extendMarkRange('link')
+      .setLink({ href: url, target: '_blank' })
+      .run()
+  }
+
+  // Clear formatting: if nothing is selected, apply to the whole document.
+  // unsetAllMarks/clearNodes only act on the current selection.
+  const handleClearFormat = () => {
+    const { from, to } = editor.state.selection
+    const chain = editor.chain().focus()
+    if (from === to) {
+      chain.selectAll()
+    }
+    chain.unsetAllMarks().clearNodes().setTextAlign('left').run()
+  }
+
+  const Separator = () => <span className="w-px bg-gray-300 mx-1 self-stretch" />
+
   return (
-    <div className="flex flex-wrap gap-2 p-2 border-b bg-gray-50">
+    <div className="flex flex-wrap items-center gap-1 p-2 border-b bg-gray-50">
+      {/* Grupo 1 — Texto */}
       <button
+        type="button"
+        title="Negrita"
         onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleBold().run() }}
         disabled={isReadOnly}
         className={btn(editor.isActive('bold'))}
       >B</button>
       <button
+        type="button"
+        title="Cursiva"
         onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleItalic().run() }}
         disabled={isReadOnly}
         className={btn(editor.isActive('italic'))}
       >I</button>
       <button
+        type="button"
+        title="Subrayado"
+        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleUnderline().run() }}
+        disabled={isReadOnly}
+        className={btn(editor.isActive('underline'))}
+      >U</button>
+      <button
+        type="button"
+        title="Tachado"
+        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleStrike().run() }}
+        disabled={isReadOnly}
+        className={btn(editor.isActive('strike'))}
+      >S</button>
+      <button
+        type="button"
+        title="Superíndice"
+        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleSuperscript().run() }}
+        disabled={isReadOnly}
+        className={btn(editor.isActive('superscript'))}
+      >x²</button>
+      <button
+        type="button"
+        title="Subíndice"
+        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleSubscript().run() }}
+        disabled={isReadOnly}
+        className={btn(editor.isActive('subscript'))}
+      >x₂</button>
+
+      <Separator />
+
+      {/* Grupo 2 — Encabezados */}
+      <button
+        type="button"
+        title="Encabezado 1"
         onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleHeading({ level: 1 }).run() }}
         disabled={isReadOnly}
         className={btn(editor.isActive('heading', { level: 1 }))}
       >H1</button>
       <button
+        type="button"
+        title="Encabezado 2"
         onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleHeading({ level: 2 }).run() }}
         disabled={isReadOnly}
         className={btn(editor.isActive('heading', { level: 2 }))}
       >H2</button>
       <button
+        type="button"
+        title="Encabezado 3"
         onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleHeading({ level: 3 }).run() }}
         disabled={isReadOnly}
         className={btn(editor.isActive('heading', { level: 3 }))}
       >H3</button>
       <button
+        type="button"
+        title="Párrafo normal"
+        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().setParagraph().run() }}
+        disabled={isReadOnly}
+        className={btn(editor.isActive('paragraph') && !editor.isActive('heading'))}
+      >¶</button>
+
+      <Separator />
+
+      {/* Grupo 3 — Alineación */}
+      <button
+        type="button"
+        title="Alinear a la izquierda"
+        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().setTextAlign('left').run() }}
+        disabled={isReadOnly}
+        className={btn(editor.isActive({ textAlign: 'left' }))}
+      >Izq</button>
+      <button
+        type="button"
+        title="Centrar"
+        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().setTextAlign('center').run() }}
+        disabled={isReadOnly}
+        className={btn(editor.isActive({ textAlign: 'center' }))}
+      >Cen</button>
+      <button
+        type="button"
+        title="Alinear a la derecha"
+        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().setTextAlign('right').run() }}
+        disabled={isReadOnly}
+        className={btn(editor.isActive({ textAlign: 'right' }))}
+      >Der</button>
+      <button
+        type="button"
+        title="Justificar"
+        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().setTextAlign('justify').run() }}
+        disabled={isReadOnly}
+        className={btn(editor.isActive({ textAlign: 'justify' }))}
+      >Just</button>
+
+      <Separator />
+
+      {/* Grupo 4 — Listas y bloques */}
+      <button
+        type="button"
+        title="Lista con viñetas"
         onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleBulletList().run() }}
         disabled={isReadOnly}
         className={btn(editor.isActive('bulletList'))}
       >• List</button>
       <button
+        type="button"
+        title="Lista numerada"
         onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleOrderedList().run() }}
         disabled={isReadOnly}
         className={btn(editor.isActive('orderedList'))}
       >1. List</button>
       <button
+        type="button"
+        title="Cita"
+        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleBlockquote().run() }}
+        disabled={isReadOnly}
+        className={btn(editor.isActive('blockquote'))}
+      >❝</button>
+      <button
+        type="button"
+        title="Código en línea"
+        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleCode().run() }}
+        disabled={isReadOnly}
+        className={btn(editor.isActive('code'))}
+      >{'</>'}</button>
+      <button
+        type="button"
+        title="Bloque de código"
+        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleCodeBlock().run() }}
+        disabled={isReadOnly}
+        className={btn(editor.isActive('codeBlock'))}
+      >Code</button>
+      <button
+        type="button"
+        title="Línea horizontal"
+        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().setHorizontalRule().run() }}
+        disabled={isReadOnly}
+        className={btn(false)}
+      >—</button>
+
+      <Separator />
+
+      {/* Grupo 5 — Enlace y color */}
+      <button
+        type="button"
+        title="Insertar/editar enlace"
+        onMouseDown={(e) => { e.preventDefault(); handleLink() }}
+        disabled={isReadOnly}
+        className={btn(editor.isActive('link'))}
+      >Link</button>
+      <label
+        title="Color de texto"
+        className={`flex items-center gap-1 px-2 py-1 rounded border bg-white cursor-pointer ${
+          isReadOnly ? 'opacity-40 cursor-not-allowed' : ''
+        }`}
+      >
+        <span>Color</span>
+        <input
+          type="color"
+          aria-label="Color de texto"
+          disabled={isReadOnly}
+          onChange={(e) => editor.chain().focus().setColor(e.target.value).run()}
+          className="h-4 w-4 cursor-pointer border-0 bg-transparent p-0"
+        />
+      </label>
+      <label
+        title="Color de resaltado"
+        className={`flex items-center gap-1 px-2 py-1 rounded border bg-white cursor-pointer ${
+          isReadOnly ? 'opacity-40 cursor-not-allowed' : ''
+        }`}
+      >
+        <span>Marca</span>
+        <input
+          type="color"
+          aria-label="Color de resaltado"
+          disabled={isReadOnly}
+          onChange={(e) => editor.chain().focus().toggleHighlight({ color: e.target.value }).run()}
+          className="h-4 w-4 cursor-pointer border-0 bg-transparent p-0"
+        />
+      </label>
+
+      <Separator />
+
+      {/* Grupo 6 — Tabla */}
+      <button
+        type="button"
+        title="Insertar tabla 3x3"
         onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() }}
         disabled={isReadOnly}
-        className="px-2 py-1 rounded bg-white border disabled:opacity-40 disabled:cursor-not-allowed"
+        className={btn(false)}
       >Tabla</button>
+
+      <Separator />
+
+      {/* Grupo 7 — Historia y limpieza */}
+      <button
+        type="button"
+        title="Deshacer"
+        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().undo().run() }}
+        disabled={isReadOnly}
+        className={btn(false)}
+      >↶</button>
+      <button
+        type="button"
+        title="Rehacer"
+        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().redo().run() }}
+        disabled={isReadOnly}
+        className={btn(false)}
+      >↷</button>
+      <button
+        type="button"
+        title="Limpiar formato (si no hay selección, aplica a todo el documento)"
+        onMouseDown={(e) => { e.preventDefault(); handleClearFormat() }}
+        disabled={isReadOnly}
+        className={btn(false)}
+      >Limpiar</button>
     </div>
   )
 }
@@ -172,6 +400,18 @@ const ProposalEditor = forwardRef<ProposalEditorHandle, ProposalEditorProps>(
     const editor = useEditor({
       extensions: [
         StarterKit,
+        Underline,
+        Link.configure({
+          openOnClick: false,
+          autolink: true,
+          HTMLAttributes: { class: 'text-blue-600 underline', rel: 'noopener noreferrer' },
+        }),
+        TextAlign.configure({ types: ['heading', 'paragraph'] }),
+        Highlight.configure({ multicolor: true }),
+        TextStyle,
+        Color,
+        Superscript,
+        Subscript,
         Table.configure({ resizable: true }),
         TableRow,
         TableHeader,

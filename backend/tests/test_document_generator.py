@@ -14,7 +14,12 @@ import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from app.services.document_generator import DocumentGenerator, _strip_html, _has_content
+from app.services.document_generator import (
+    DocumentGenerator,
+    _add_html_paragraphs,
+    _has_content,
+    _strip_html,
+)
 from app.services.portfolio_service import PortfolioProduct
 
 
@@ -564,3 +569,149 @@ class TestConvertDocxToPdfWindowsCOM:
 
         mock_pythoncom.CoInitialize.assert_called_once()
         mock_pythoncom.CoUninitialize.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Tests del parser HTML → docx (preservación de formato TipTap)
+# ---------------------------------------------------------------------------
+
+
+def _render(html: str) -> str:
+    """Crea un Document, le pasa el HTML y devuelve el XML interno."""
+    from docx import Document
+    doc = Document()
+    _add_html_paragraphs(doc, html)
+    return _get_doc_xml(doc)
+
+
+class TestHtmlToDocx:
+    """Comprueba que cada marca/etiqueta HTML emitida por TipTap se traduce
+    a la marca OOXML correspondiente en el .docx generado."""
+
+    def test_bold_marker(self):
+        xml = _render("<p><strong>negrita</strong></p>")
+        assert "<w:b/>" in xml
+        assert "negrita" in xml
+
+    def test_italic_marker(self):
+        xml = _render("<p><em>cursiva</em></p>")
+        assert "<w:i/>" in xml
+        assert "cursiva" in xml
+
+    def test_underline_marker(self):
+        xml = _render("<p><u>subrayado</u></p>")
+        assert '<w:u w:val="single"/>' in xml
+
+    def test_strike_marker(self):
+        xml = _render("<p><s>tachado</s></p>")
+        assert "<w:strike/>" in xml
+
+    def test_superscript_marker(self):
+        xml = _render("<p>x<sup>2</sup></p>")
+        assert '<w:vertAlign w:val="superscript"/>' in xml
+
+    def test_subscript_marker(self):
+        xml = _render("<p>H<sub>2</sub>O</p>")
+        assert '<w:vertAlign w:val="subscript"/>' in xml
+
+    def test_text_align_center(self):
+        xml = _render('<p style="text-align: center">centrado</p>')
+        assert '<w:jc w:val="center"/>' in xml
+
+    def test_text_align_right(self):
+        xml = _render('<p style="text-align: right">derecha</p>')
+        assert '<w:jc w:val="right"/>' in xml
+
+    def test_text_align_justify(self):
+        xml = _render('<p style="text-align: justify">justificado</p>')
+        # python-docx serializa justify como "both"
+        assert '<w:jc w:val="both"/>' in xml or '<w:jc w:val="justify"/>' in xml
+
+    def test_blockquote_uses_quote_style(self):
+        xml = _render("<blockquote>cita</blockquote>")
+        assert 'w:val="Quote"' in xml
+
+    def test_horizontal_rule(self):
+        xml = _render("<hr>")
+        assert "<w:pBdr" in xml
+        assert "<w:bottom" in xml
+
+    def test_hyperlink_creates_w_hyperlink(self):
+        xml = _render('<p><a href="https://example.com">visita</a></p>')
+        assert "<w:hyperlink" in xml
+        assert "visita" in xml
+
+    def test_highlight_marker(self):
+        xml = _render('<p><mark style="background-color: #ffff00">resaltado</mark></p>')
+        assert "<w:highlight" in xml
+
+    def test_color_from_span(self):
+        xml = _render('<p><span style="color: #ff0000">rojo</span></p>')
+        assert '<w:color w:val="FF0000"' in xml
+
+    def test_bullet_list(self):
+        xml = _render("<ul><li>uno</li><li>dos</li></ul>")
+        # python-docx usa "ListBullet" como ID interno del estilo "List Bullet"
+        assert "ListBullet" in xml
+        assert "uno" in xml
+        assert "dos" in xml
+
+    def test_ordered_list(self):
+        xml = _render("<ol><li>a</li><li>b</li></ol>")
+        assert "ListNumber" in xml
+
+    def test_headings_use_heading_styles(self):
+        xml = _render("<h1>Título 1</h1><h2>Título 2</h2><h3>Título 3</h3>")
+        assert 'w:val="Heading1"' in xml
+        assert 'w:val="Heading2"' in xml
+        assert 'w:val="Heading3"' in xml
+
+    def test_mixed_run_styles(self):
+        """Un solo párrafo con runs de distintos formatos preserva cada uno."""
+        xml = _render(
+            "<p><strong>negrita</strong> normal <em>cursiva</em></p>"
+        )
+        assert "negrita" in xml
+        assert "normal" in xml
+        assert "cursiva" in xml
+        assert "<w:b/>" in xml
+        assert "<w:i/>" in xml
+
+    def test_nested_marks(self):
+        """Negrita + cursiva combinadas en un mismo texto."""
+        xml = _render("<p><strong><em>ambas</em></strong></p>")
+        assert "<w:b/>" in xml
+        assert "<w:i/>" in xml
+        assert "ambas" in xml
+
+    def test_plain_text_without_tags(self):
+        """Texto sin etiquetas se inserta como párrafo plano."""
+        xml = _render("texto sin etiquetas")
+        assert "texto sin etiquetas" in xml
+
+    def test_empty_string_does_nothing(self):
+        from docx import Document
+        doc = Document()
+        before = _get_doc_xml(doc)
+        _add_html_paragraphs(doc, "")
+        after = _get_doc_xml(doc)
+        assert before == after
+
+    def test_br_creates_line_break(self):
+        xml = _render("<p>línea 1<br/>línea 2</p>")
+        assert "<w:br/>" in xml
+        assert "línea 1" in xml
+        assert "línea 2" in xml
+
+    def test_html_entities_decoded(self):
+        xml = _render("<p>Tom&amp;Jerry &lt;eq&gt;</p>")
+        # XML escapa & como &amp;, < como &lt;
+        assert "Tom&amp;Jerry" in xml
+        assert "&lt;eq&gt;" in xml
+
+    def test_link_with_bold_inside(self):
+        """Una marca dentro de un link debe coexistir con el hyperlink."""
+        xml = _render('<p><a href="https://x.com"><strong>link bold</strong></a></p>')
+        assert "<w:hyperlink" in xml
+        assert "link bold" in xml
+        assert "<w:b/>" in xml

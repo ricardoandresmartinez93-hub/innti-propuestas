@@ -105,7 +105,35 @@ POST /api/proposals/{id}/generate-annex
     └─► PortfolioService + DocumentGenerator.generate_technical_annex() → FileResponse(.docx)
 ```
 
+## Conversor HTML → docx (`_HtmlToDocxParser`)
+
+El contenido editable de TipTap se guarda como HTML en la BD y se traduce a Word mediante el parser `_HtmlToDocxParser` (basado en `html.parser` de la stdlib), invocado por `_add_html_paragraphs(doc, html_text)`.
+
+| HTML (TipTap) | docx (python-docx) |
+|---------------|-------------------|
+| `<strong>` / `<b>` | `run.bold = True` |
+| `<em>` / `<i>` | `run.italic = True` |
+| `<u>` | `run.underline = True` |
+| `<s>` / `<del>` | `run.font.strike = True` |
+| `<sup>` / `<sub>` | `run.font.superscript/.subscript = True` |
+| `<mark style="background-color:#xxx">` | `run.font.highlight_color = WD_COLOR_INDEX más cercano` |
+| `<span style="color:#xxx">` | `run.font.color.rgb = RGBColor(...)` |
+| `<a href="...">` | helper `_add_hyperlink` (OOXML `w:hyperlink`) |
+| `<p style="text-align: center\|right\|justify\|left">` | `paragraph.alignment = WD_ALIGN_PARAGRAPH.*` |
+| `<h1>`–`<h6>` | `doc.add_heading(level=N)` |
+| `<ul>/<li>` | `style="List Bullet"` |
+| `<ol>/<li>` | `style="List Number"` |
+| `<blockquote>` | `style="Quote"` |
+| `<hr>` | `_add_horizontal_rule` (`w:pBdr` con borde inferior) |
+| `<code>` / `<pre>` | `run.font.name = "Consolas"` |
+| `<br>` | `run.add_break()` |
+
+`_strip_html` ahora se usa **únicamente** desde `_has_content` (detectar si una sección tiene texto real para decidir si se omite). No se debe usar como serializador.
+
+> ⚠️ Si TipTap incorpora una nueva marca/extensión (p.ej. resaltado con clase, footnote, etc.), debe ampliarse el parser para que el formato llegue al documento final — de lo contrario se ve en el editor pero no en el .docx/.pdf.
+
 ## Limitaciones
 
 - WeasyPrint requiere librerías del sistema (GTK en Windows). En tests se mockea con `MagicMock` desde `conftest.py`.
 - Si Innti falla durante la generación, el sistema hace **fallback silencioso** y continúa con campos vacíos (no lanza error al usuario).
+- El highlight de `<mark>` mapea colores arbitrarios a la paleta cerrada de `WD_COLOR_INDEX` por proximidad RGB (Word no soporta highlight con hex libre).

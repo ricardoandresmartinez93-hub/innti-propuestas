@@ -76,6 +76,22 @@ El editor tiene **8 pestañas**, divididas en dos grupos:
 
 > El botón **Guardar** persiste cambios globales vía `PATCH /api/proposals/{id}` y cambios por esquema vía `PATCH /api/proposals/{id}/schemes/{scheme_id}`. Funciona desde cualquier pestaña/sub-tab.
 
+### Barra de herramientas del editor (TipTap)
+
+Sobre el área editable hay una toolbar agrupada (cada grupo separado por una línea vertical sutil). Todos los botones se deshabilitan cuando la pestaña activa es de solo lectura (`readOnly: true`, p.ej. Carta de Presentación).
+
+| Grupo | Botones |
+|-------|---------|
+| Texto | `B` (negrita), `I` (cursiva), `U` (subrayado), `S` (tachado), `x²` (superíndice), `x₂` (subíndice) |
+| Encabezados | `H1`, `H2`, `H3`, `¶` (volver a párrafo normal) |
+| Alineación | `Izq`, `Cen`, `Der`, `Just` |
+| Listas y bloques | `• List`, `1. List`, `❝` (cita), `</>` (código en línea), `Code` (bloque de código), `—` (línea horizontal) |
+| Enlace y color | `Link` (prompt para URL), `Color` (input nativo de color de texto), `Marca` (input nativo de color de resaltado) |
+| Tabla | `Tabla` (inserta tabla 3×3 con encabezado) |
+| Historia y limpieza | `↶` (deshacer), `↷` (rehacer), `Limpiar` (elimina todas las marcas y vuelve a párrafo) |
+
+Las marcas inline (bold, italic, underline, strike, sup/sub, color, highlight, link), los bloques (heading, blockquote, listas, alineación, hr) y los hyperlinks se **preservan en el Word/PDF generado** gracias al parser `_HtmlToDocxParser` en `document_generator.py`.
+
 **Referencia:** Skill `document-generation` para textos fijos
 
 ## 4️⃣ Enviar a Revisión
