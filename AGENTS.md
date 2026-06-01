@@ -99,7 +99,7 @@ DRAFT ──► PENDING_REVIEW ──► REVIEWED ──► PENDING_VP ──►
 | `POST /api/proposals/{id}/reject` | Registra rechazo (body: `role`, `approver_name`, `action: "rejected"`, `comments` obligatorio) |
 | `PATCH /api/proposals/{id}` | Edita contenido **global** (carta, contexto, confidencialidad, combine_schemes) |
 | `PATCH /api/proposals/{id}/schemes/{scheme_id}` | Edita contenido **por esquema** (alcance, plazo, condiciones económicas, forma de pago, exclusiones, IP) |
-| `POST /api/proposals/{id}/generate-document` | Genera y descarga el Word — `.docx` único o ZIP según `combine_schemes` |
+| `POST /api/proposals/{id}/generate-document` | Genera y descarga el Word — `.docx` único o ZIP según `combine_schemes` (usa Innti si `use_innti=true`) |
 | `POST /api/proposals/{id}/generate-pdf` | Genera y descarga el PDF — `.pdf` único o ZIP según `combine_schemes` |
 | `POST /api/proposals/{id}/generate-annex` | Genera y descarga el Anexo Técnico (.docx) |
 
