@@ -36,6 +36,7 @@
 - **Seguridad:** Nunca incluir secretos en el código. Usar `.env` (jamás subirlo). Revisar `.gitignore` antes de hacer commit.
 - **Permisos de bash:** `pytest*` y `npm test*` se ejecutan sin preguntar; `uvicorn`, `npm run dev`, instalaciones requieren confirmación.
 - **Pruebas unitarias obligatorias:** Todo código nuevo — tanto en Backend como en Frontend — **debe** ir acompañado de pruebas unitarias en el mismo PR/commit. No se considera completa ninguna funcionalidad sin su cobertura de tests. Ver sección [Testing](#testing) para las convenciones de cada capa.
+- **Skills y Agents on-demand:** Si durante el desarrollo se necesita un skill o agent que no existe, créalo en lugar de reportarlo. Ambas herramientas (Claude Code y openCode) deben usar las mismas definiciones.
 - **Documentación siempre actualizada:** Después de crear o modificar **cualquier** archivo de código, revisar y actualizar la documentación del proyecto para que refleje los cambios. Los archivos a verificar son:
   - `AGENTS.md` — si cambia stack, reglas, convenciones o flujos técnicos
   - `.opencode/agents/*.md` — si cambia el comportamiento de un agente
