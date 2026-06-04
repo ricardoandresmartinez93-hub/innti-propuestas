@@ -1,5 +1,29 @@
 # Reglas de Desarrollo - Innti Propuestas
 
+## 📋 Metodología: SDD (Spec-Driven Development)
+
+**Desde 2026-06-03, TODOS los desarrollos DEBEN hacerse con SDD.**
+
+### Flujo obligatorio:
+1. **Exploration** (`/sdd-explore`) — Investigar la idea
+2. **Proposal** (`/sdd-propose`) — Formalizar la propuesta
+3. **Specification** (`/sdd-spec`) — Escribir requerimientos y escenarios
+4. **Design** (`/sdd-design`) — Decisiones arquitectónicas
+5. **Tasks** (`/sdd-tasks`) — Desglose en tareas verificables
+6. **Apply** (`/sdd-apply`) — Implementación guiada por tasks
+7. **Verify** (`/sdd-verify`) — Validación contra specs
+8. **Archive** (`/sdd-archive`) — Cierre y persistencia de artifacts
+
+### Excepciones permitidas:
+- **Bugs críticos en producción:** Ir directamente a apply/fix con contexto explícito
+- **Cambios triviales:** Typos, actualizaciones de documentación menor, cambios de configuración sin lógica
+
+### Artifact Store:
+- **Por defecto:** `openspec` (committable, para team review en `openspec/changes/`)
+- **Descripción:** Los artifacts (proposal, spec, design, tasks, apply-progress, verify-report) se guardan en archivos para que el equipo pueda revisar y auditar
+
+---
+
 ## Stack Tecnológico
 - **Backend:** FastAPI, SQLAlchemy (SQLite), Pydantic v2, pydantic-settings.
 - **Frontend:** React 18, TypeScript, Vite, Tailwind CSS, TipTap (rich text editor).
