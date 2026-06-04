@@ -27,7 +27,7 @@ def portfolio_mock(client):
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-def _make_product(name: str = "Producto Test", product_type: str = "software"):
+def _make_product(name: str = "Producto Test", product_type: str = "software", allowed_schemes=None):
     """Crea un objeto mock que simula un PortfolioProduct."""
     p = MagicMock()
     p.name = name
@@ -37,6 +37,7 @@ def _make_product(name: str = "Producto Test", product_type: str = "software"):
     p.monetization_model = "SaaS"
     p.pricing_model = "Por usuario"
     p.country = "Colombia"
+    p.allowed_schemes = allowed_schemes if allowed_schemes is not None else []
     return p
 
 
@@ -112,3 +113,30 @@ def test_list_product_types(client, portfolio_mock):
     assert len(types) == len(set(types))
     assert "software" in types
     assert "hardware" in types
+
+
+def test_product_response_includes_allowed_schemes(client, portfolio_mock):
+    """La respuesta de productos incluye el campo allowed_schemes."""
+    portfolio_mock.get_products.return_value = [
+        _make_product("ProdA", allowed_schemes=["licensing", "services"]),
+    ]
+
+    response = client.get("/api/portfolio/products")
+
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert "allowed_schemes" in data[0]
+    assert set(data[0]["allowed_schemes"]) == {"licensing", "services"}
+
+
+def test_product_response_empty_allowed_schemes(client, portfolio_mock):
+    """Un producto sin restricciones devuelve allowed_schemes vacío."""
+    portfolio_mock.get_products.return_value = [
+        _make_product("ProdB", allowed_schemes=[]),
+    ]
+
+    response = client.get("/api/portfolio/products")
+
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data[0]["allowed_schemes"] == []

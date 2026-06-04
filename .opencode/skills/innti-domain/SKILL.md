@@ -63,6 +63,16 @@ El servicio `app/services/approval_service.py` contiene toda la lógica de trans
   - `generate_cover_letter(client_name, position, entity, subject)` — Carta de presentación
   - `enrich_product_description(product_name, base_description)` — Enriquece descripción técnica para el anexo
 
+## Restricción Producto → Esquemas
+
+Desde junio 2026, los esquemas comerciales disponibles dependen de los productos del portafolio seleccionados:
+
+- **Fuente de datos**: columna 9 ("Esquemas Permitidos") del Excel, con valores separados por coma.
+- **Cálculo**: INTERSECCIÓN de esquemas de todos los productos seleccionados. Solo se muestran esquemas válidos para TODOS los productos. Un producto sin restricción aporta todos los MVP schemes (no estrecha el conjunto). Intersección vacía → aviso en UI, no se puede avanzar al paso 3.
+- **Retrocompatibilidad**: celda vacía o columna ausente = todos los MVP schemes permitidos.
+- **Validación en backend**: `POST /api/proposals/` retorna 422 si algún esquema enviado no es compatible con los productos.
+- **Método clave**: `PortfolioService.get_allowed_schemes_for_products(product_names: List[str]) -> List[str]`
+
 ## Terminología Clave
 - **Innti**: Motor de IA corporativa de Quipux (LiteLLM).
 - **Portafolio**: Catálogo de productos/servicios de Quipux definido en `ListaPortafolio.xlsx`.

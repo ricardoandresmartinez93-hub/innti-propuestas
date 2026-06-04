@@ -17,6 +17,7 @@ from app.database import Base, get_db
 from app.main import app
 from app.models.user import User, UserRole
 from app.auth import get_password_hash, create_access_token
+from app.routers.portfolio import get_portfolio_service
 
 
 # Base de datos en memoria para tests
@@ -47,7 +48,17 @@ def client(db_session: Session):
         finally:
             pass
 
+    # Default: permissive portfolio service — all MVP schemes allowed for any product.
+    # Tests that need specific scheme restrictions should override get_portfolio_service
+    # using their own fixture (see test_portfolio_api.py's `portfolio_mock`).
+    _permissive_portfolio = MagicMock()
+    _permissive_portfolio.get_products.return_value = []
+    _permissive_portfolio.get_allowed_schemes_for_products.return_value = [
+        "licensing", "services", "support_maintenance"
+    ]
+
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_portfolio_service] = lambda: _permissive_portfolio
     with patch("app.main.SessionLocal", TestSessionLocal):
         with TestClient(app) as test_client:
             yield test_client

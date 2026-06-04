@@ -1,8 +1,11 @@
 import pytest
+from unittest.mock import MagicMock
 from fastapi import status
 from sqlalchemy.orm import Session
 from app.models.proposal import Proposal, ProposalStatus
 from app.models.client import Client
+from app.main import app
+from app.routers.portfolio import get_portfolio_service
 
 def test_list_proposals_empty(client):
     """Lista vacía al inicio."""
@@ -211,3 +214,120 @@ def test_full_approval_flow(client, creator_headers, approver_1_headers, approve
 
     final_prop_res = client.get(f"/api/proposals/{proposal_id}")
     assert final_prop_res.json()["status"] == "approved"
+
+
+# ── Fixtures para validación esquema-producto ─────────────────────────────────
+
+def _make_portfolio_product(name: str, allowed_schemes: list):
+    """Crea un mock de PortfolioProduct con restricciones específicas."""
+    p = MagicMock()
+    p.name = name
+    p.allowed_schemes = allowed_schemes
+    return p
+
+
+@pytest.fixture
+def restricted_portfolio(client):
+    """Portfolio mock que restringe 'ProdRestringido' a solo 'licensing'."""
+    mock_svc = MagicMock()
+    mock_svc.get_products.return_value = [
+        _make_portfolio_product("ProdRestringido", allowed_schemes=["licensing"]),
+    ]
+    mock_svc.get_allowed_schemes_for_products.return_value = ["licensing"]
+    app.dependency_overrides[get_portfolio_service] = lambda: mock_svc
+    yield mock_svc
+
+
+@pytest.fixture
+def permissive_portfolio(client):
+    """Portfolio mock que permite todos los MVP schemes para cualquier producto."""
+    mock_svc = MagicMock()
+    mock_svc.get_products.return_value = []
+    mock_svc.get_allowed_schemes_for_products.return_value = [
+        "licensing", "services", "support_maintenance"
+    ]
+    app.dependency_overrides[get_portfolio_service] = lambda: mock_svc
+    yield mock_svc
+
+
+# ── Tests de validación esquema-producto ──────────────────────────────────────
+
+def test_create_proposal_scheme_not_allowed_for_product(
+    client, creator_headers, sample_client_data, sample_proposal_data, restricted_portfolio
+):
+    """Retorna 422 si el esquema seleccionado no está permitido para los productos."""
+    client_res = client.post("/api/clients/", json=sample_client_data)
+    client_id = client_res.json()["id"]
+
+    proposal_data = sample_proposal_data.copy()
+    proposal_data["client_id"] = client_id
+    # Solo 'licensing' está permitido; intentamos 'services'
+    proposal_data["products"] = [{"product_name": "ProdRestringido", "product_type": "Plataforma"}]
+    proposal_data["schemes"] = [{"scheme_type": "services", "payment_frequency": "Mensual"}]
+
+    response = client.post("/api/proposals/", json=proposal_data, headers=creator_headers)
+
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert "no están permitidos" in response.json()["detail"]
+
+
+def test_create_proposal_scheme_allowed_for_product_succeeds(
+    client, creator_headers, sample_client_data, sample_proposal_data, restricted_portfolio
+):
+    """Crea la propuesta correctamente cuando el esquema está permitido."""
+    client_res = client.post("/api/clients/", json=sample_client_data)
+    client_id = client_res.json()["id"]
+
+    proposal_data = sample_proposal_data.copy()
+    proposal_data["client_id"] = client_id
+    # 'licensing' sí está permitido para este producto
+    proposal_data["products"] = [{"product_name": "ProdRestringido", "product_type": "Plataforma"}]
+    proposal_data["schemes"] = [{"scheme_type": "licensing", "payment_frequency": "Único"}]
+
+    response = client.post("/api/proposals/", json=proposal_data, headers=creator_headers)
+
+    assert response.status_code == status.HTTP_201_CREATED
+
+
+def test_create_proposal_no_products_skips_scheme_validation(
+    client, creator_headers, sample_client_data, permissive_portfolio
+):
+    """Sin productos, no se valida compatibilidad de esquemas."""
+    client_res = client.post("/api/clients/", json=sample_client_data)
+    client_id = client_res.json()["id"]
+
+    proposal_data = {
+        "title": "Sin productos",
+        "code": "0001-0626",
+        "client_id": client_id,
+        "combine_schemes": True,
+        "products": [],
+        "schemes": [{"scheme_type": "licensing", "payment_frequency": "Único"}],
+    }
+
+    response = client.post("/api/proposals/", json=proposal_data, headers=creator_headers)
+    assert response.status_code == status.HTTP_201_CREATED
+
+
+def test_create_proposal_multiple_schemes_all_allowed(
+    client, creator_headers, sample_client_data, permissive_portfolio
+):
+    """Con portfolio permisivo, se pueden seleccionar múltiples esquemas MVP."""
+    client_res = client.post("/api/clients/", json=sample_client_data)
+    client_id = client_res.json()["id"]
+
+    proposal_data = {
+        "title": "Multi-esquema",
+        "code": "0002-0626",
+        "client_id": client_id,
+        "combine_schemes": True,
+        "products": [{"product_name": "ProdX", "product_type": "Plataforma"}],
+        "schemes": [
+            {"scheme_type": "licensing", "payment_frequency": "Único"},
+            {"scheme_type": "services", "payment_frequency": "Mensual"},
+        ],
+    }
+
+    response = client.post("/api/proposals/", json=proposal_data, headers=creator_headers)
+    assert response.status_code == status.HTTP_201_CREATED
+    assert len(response.json()["schemes"]) == 2

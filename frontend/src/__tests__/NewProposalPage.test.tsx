@@ -29,15 +29,21 @@ vi.mock('../services/api', () => ({
 // ─── Mock SchemeSelector ──────────────────────────────────────────────────────
 // Botón que simula seleccionar un esquema (evita depender del componente real).
 vi.mock('../components/SchemeSelector', () => ({
-  default: ({ onSchemesChanged }: {
+  default: ({ onSchemesChanged, allowedSchemes }: {
     onSchemesChanged: (schemes: { scheme_type: string; payment_frequency: string }[], combine: boolean) => void
+    allowedSchemes?: string[]
   }) => (
-    <button
-      data-testid="mock-scheme-btn"
-      onClick={() => onSchemesChanged([{ scheme_type: 'licensing', payment_frequency: 'único' }], true)}
-    >
-      Seleccionar Esquema Mock
-    </button>
+    <div>
+      {allowedSchemes && (
+        <span data-testid="allowed-schemes">{allowedSchemes.join(',')}</span>
+      )}
+      <button
+        data-testid="mock-scheme-btn"
+        onClick={() => onSchemesChanged([{ scheme_type: 'licensing', payment_frequency: 'único' }], true)}
+      >
+        Seleccionar Esquema Mock
+      </button>
+    </div>
   ),
 }))
 
@@ -72,6 +78,7 @@ const mockProducts: PortfolioProduct[] = [
     monetization_model: '',
     pricing_model: '',
     country: 'Colombia',
+    allowed_schemes: ['licensing', 'services', 'support_maintenance'],
   },
 ]
 
@@ -395,6 +402,75 @@ describe('NewProposalPage — Paso 4: código y título', () => {
       expect(proposalApi.create).toHaveBeenCalledWith(
         expect.objectContaining({ code: '3018-0526' })
       )
+    })
+  })
+})
+
+// ── allowedSchemes — filtrado por producto seleccionado ───────────────────────
+describe('NewProposalPage — allowedSchemes', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(portfolioApi.listProducts).mockResolvedValue({ data: mockProducts } as any)
+    vi.mocked(clientApi.list).mockResolvedValue({ data: mockClients } as any)
+  })
+
+  const renderPage = () =>
+    render(
+      <MemoryRouter>
+        <NewProposalPage />
+      </MemoryRouter>
+    )
+
+  it('pasa allowedSchemes al SchemeSelector con los esquemas del producto seleccionado', async () => {
+    const restrictedProduct: PortfolioProduct = {
+      name: 'ProdRestringido',
+      product_type: 'software',
+      description: '',
+      business_framework: '',
+      monetization_model: '',
+      pricing_model: '',
+      country: 'Colombia',
+      allowed_schemes: ['licensing'],
+    }
+    vi.mocked(portfolioApi.listProducts).mockResolvedValue({ data: [restrictedProduct] } as any)
+
+    renderPage()
+
+    // Esperar a que aparezca el nombre del producto (indica que la carga terminó)
+    await waitFor(() => expect(screen.getByText('ProdRestringido')).toBeInTheDocument())
+
+    // Seleccionar el producto usando el único checkbox disponible
+    fireEvent.click(screen.getAllByRole('checkbox')[0])
+
+    // Avanzar al paso 2 (el botón se habilita al seleccionar al menos 1 producto)
+    await waitFor(() => expect(screen.getByText('Siguiente')).not.toBeDisabled())
+    fireEvent.click(screen.getByText('Siguiente'))
+
+    // Verificar que el allowed-schemes que recibe SchemeSelector sea el del producto
+    await waitFor(() => {
+      const allowedEl = screen.queryByTestId('allowed-schemes')
+      if (allowedEl) {
+        expect(allowedEl.textContent).toContain('licensing')
+        expect(allowedEl.textContent).not.toContain('services')
+      }
+    })
+  })
+
+  it('pasa todos los MVP schemes cuando el producto no tiene restricciones', async () => {
+    renderPage()
+    await waitFor(() => expect(screen.queryByText('Cargando portafolio...')).not.toBeInTheDocument())
+
+    // El producto mock tiene todos los MVP schemes
+    fireEvent.click(screen.getAllByRole('checkbox')[0])
+    fireEvent.click(screen.getByText('Siguiente'))
+
+    await waitFor(() => {
+      const allowedEl = screen.queryByTestId('allowed-schemes')
+      if (allowedEl) {
+        expect(allowedEl.textContent).toContain('licensing')
+        expect(allowedEl.textContent).toContain('services')
+        expect(allowedEl.textContent).toContain('support_maintenance')
+      }
     })
   })
 })

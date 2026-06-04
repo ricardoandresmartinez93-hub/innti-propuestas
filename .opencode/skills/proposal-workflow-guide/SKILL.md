@@ -14,10 +14,10 @@ Flujo de usuario completo para crear y gestionar propuestas en Innti Propuestas.
 
 1. **Paso 1 — Productos:** Seleccionar productos del portafolio (ListaPortafolio.xlsx)
 2. **Paso 2 — Esquemas:** Seleccionar esquema(s) comerciales (puede ser combinado):
-   - ☑️ Licenciamiento (pago único)
-   - ☑️ Prestación de Servicios (mensual)
-   - ☑️ Soporte y Mantenimiento (anual)
-   - ⚠️ NO disponibles: Concesión/BPO, Suministro (Fase 2)
+   - Solo se muestran los esquemas **permitidos para los productos seleccionados** en el paso 1.
+   - El selector muestra un badge "Filtrado por productos seleccionados" cuando hay restricciones.
+   - Si ningún producto tiene restricción, aparecen los 3 MVP schemes: Licenciamiento, Prestación de Servicios, Soporte y Mantenimiento.
+   - ⚠️ NO disponibles nunca: Concesión/BPO, Suministro (Fase 2)
 3. **Paso 3 — Cliente:** Seleccionar cliente existente o crear uno nuevo
 4. **Paso 4 — Resumen:** Ingresar **código** y **título** de la propuesta
 

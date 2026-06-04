@@ -21,6 +21,7 @@ describe('SchemeSelector', () => {
     props: {
       initialSchemes?: Omit<ProposalScheme, 'id'>[]
       initialCombine?: boolean
+      allowedSchemes?: string[]
     } = {}
   ) =>
     render(
@@ -160,5 +161,57 @@ describe('SchemeSelector', () => {
     // El segundo botón (Documentos separados) debe tener el estilo activo
     // Solo verificamos que existe el botón (la lógica visual es de estilos CSS)
     expect(screen.getByText('Documentos separados')).toBeInTheDocument()
+  })
+
+  // ── 6. allowedSchemes — filtrado por producto ─────────────────────────────
+  describe('allowedSchemes', () => {
+    it('sin allowedSchemes muestra todos los esquemas de SCHEME_LABELS', () => {
+      renderSelector()
+      // Los tres MVP visibles
+      expect(screen.getByText('Licenciamiento')).toBeInTheDocument()
+      expect(screen.getByText('Prestación de Servicios')).toBeInTheDocument()
+      expect(screen.getByText('Soporte y Mantenimiento')).toBeInTheDocument()
+    })
+
+    it('con allowedSchemes solo muestra los esquemas incluidos', () => {
+      renderSelector({ allowedSchemes: ['licensing'] })
+      expect(screen.getByText('Licenciamiento')).toBeInTheDocument()
+      expect(screen.queryByText('Prestación de Servicios')).not.toBeInTheDocument()
+      expect(screen.queryByText('Soporte y Mantenimiento')).not.toBeInTheDocument()
+    })
+
+    it('muestra el badge "Filtrado por productos seleccionados" cuando hay restricción', () => {
+      renderSelector({ allowedSchemes: ['licensing'] })
+      expect(screen.getByText(/Filtrado por productos seleccionados/i)).toBeInTheDocument()
+    })
+
+    it('no muestra el badge cuando allowedSchemes no está definido', () => {
+      renderSelector()
+      expect(screen.queryByText(/Filtrado por productos seleccionados/i)).not.toBeInTheDocument()
+    })
+
+    it('allowedSchemes con todos los MVP schemes no oculta ningún esquema MVP', () => {
+      renderSelector({ allowedSchemes: ['licensing', 'services', 'support_maintenance'] })
+      expect(screen.getByText('Licenciamiento')).toBeInTheDocument()
+      expect(screen.getByText('Prestación de Servicios')).toBeInTheDocument()
+      expect(screen.getByText('Soporte y Mantenimiento')).toBeInTheDocument()
+    })
+
+    it('con allowedSchemes vacío muestra el aviso de productos incompatibles', () => {
+      renderSelector({ allowedSchemes: [] })
+      expect(screen.queryByText('Licenciamiento')).not.toBeInTheDocument()
+      expect(screen.queryByText('Prestación de Servicios')).not.toBeInTheDocument()
+      expect(screen.queryByText('Soporte y Mantenimiento')).not.toBeInTheDocument()
+      expect(screen.getByText(/no comparten ningún esquema comercial/i)).toBeInTheDocument()
+    })
+
+    it('se puede seleccionar un esquema dentro de allowedSchemes', () => {
+      renderSelector({ allowedSchemes: ['licensing', 'services'] })
+      fireEvent.click(screen.getByRole('checkbox', { name: /Licenciamiento/i }))
+      expect(mockOnSchemesChanged).toHaveBeenLastCalledWith(
+        expect.arrayContaining([expect.objectContaining({ scheme_type: 'licensing' })]),
+        true
+      )
+    })
   })
 })

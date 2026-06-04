@@ -145,6 +145,14 @@ DRAFT ──► PENDING_REVIEW ──► REVIEWED ──► PENDING_VP ──►
 - Fuente de verdad: `ListaPortafolio.xlsx` (raíz del proyecto).
 - Servicio: `app/services/portfolio_service.py` → clase `PortfolioService`.
 - El campo `portfolio_file_path` en `config.py` apunta a este archivo.
+- **Columna 9 — Esquemas Permitidos:** columna opcional en el Excel (índice 9, hoja "Hoja2") con valores separados por coma (ej: `"licensing,services"`). Si la celda está vacía o la columna no existe, el producto admite todos los MVP schemes. Este campo controla qué esquemas aparecen disponibles en el paso 2 de creación de propuesta.
+
+### Relación Producto → Esquemas Comerciales
+- Los esquemas disponibles en el paso 2 de `NewProposalPage` se filtran según los productos seleccionados en el paso 1.
+- **Cálculo:** INTERSECCIÓN de los `allowed_schemes` de todos los productos seleccionados. Solo se muestran esquemas válidos para TODOS los productos. Un producto sin restricciones aporta todos los MVP schemes (no estrecha el conjunto). Si la intersección es vacía, se muestra un aviso y el usuario no puede avanzar.
+- **Frontend:** `SchemeSelector` recibe prop `allowedSchemes?: string[]` y oculta los esquemas no incluidos.
+- **Backend:** `POST /api/proposals/` valida que todos los esquemas enviados estén en el conjunto permitido para los productos. Retorna 422 si hay incompatibilidad.
+- **Retrocompatibilidad:** si la columna 9 no existe en el Excel, todos los productos tienen `allowed_schemes = []` → todos los MVP schemes son válidos → comportamiento idéntico al anterior.
 
 ## Testing
 

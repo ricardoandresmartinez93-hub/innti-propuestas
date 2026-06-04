@@ -90,6 +90,10 @@ Comparación de componentes:
 
 Estas son las cosas que son fáciles de equivocar si no se leyó el código real:
 
+13. **Relación Producto → Esquemas (desde junio 2026):** Los esquemas disponibles en el paso 2 dependen de los productos seleccionados en el paso 1. La fuente de datos es la columna 9 del Excel ("Esquemas Permitidos"), separada por comas. `PortfolioService.get_allowed_schemes_for_products()` computa la **INTERSECCIÓN**: solo se muestran esquemas válidos para TODOS los productos seleccionados. Un producto sin restricción aporta todos los MVP schemes (no estrecha el conjunto). Si la intersección es vacía, `SchemeSelector` muestra un aviso y el usuario no puede avanzar. El backend valida en `POST /api/proposals/` con HTTP 422 si hay incompatibilidad. Ver `_validate_scheme_product_compatibility` en `proposals.py`.
+
+14. **Mock de portfolio en tests:** El fixture `client` en `conftest.py` ya inyecta un portfolio mock permisivo (todos los MVP schemes) para que los tests existentes no fallen. Tests que necesiten restricciones específicas deben sobreescribir `get_portfolio_service` con su propio fixture (patrón igual que `portfolio_mock` en `test_portfolio_api.py`).
+
 1. **`REVIEWED` NO puede rechazarse.** Solo `PENDING_REVIEW` y `PENDING_VP` pueden ir a `REJECTED`.
 2. **`submit-review` maneja 4 transiciones** según el estado actual: `DRAFT→PENDING_REVIEW`, `REVIEWED→PENDING_VP`, `APPROVED→SENT_TO_CLIENT`, `REJECTED→DRAFT`. El endpoint detecta el estado automáticamente.
 3. **Los endpoints de documentos son POST, no GET**, y usan prefijo `/api/proposals/`, no `/documents/`.
@@ -130,6 +134,7 @@ Estas son las cosas que son fáciles de equivocar si no se leyó el código real
 | Generación de documentos | — | ✅ | ✅ |
 | Validación pre-commit | — | — | ✅ |
 | Automatización completa | — | — | ✅ |
+| Relación Producto → Esquemas | ✅ | ✅ | — |
 
 ---
 

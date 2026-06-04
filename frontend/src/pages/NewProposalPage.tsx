@@ -6,6 +6,24 @@ import type { PortfolioProduct, ProposalScheme, Client, ProposalCreate } from '.
 import SchemeSelector from '../components/SchemeSelector'
 import ClientForm from '../components/ClientForm'
 
+const MVP_SCHEME_TYPES = ['licensing', 'services', 'support_maintenance']
+
+/** Returns the intersection of allowed schemes across all selected products.
+ *  A product with no restrictions contributes all MVP schemes (does not restrict).
+ *  Returns an empty array when the selected products have no schemes in common. */
+function computeAllowedSchemes(products: PortfolioProduct[]): string[] {
+  if (products.length === 0) return MVP_SCHEME_TYPES
+  let intersection = new Set<string>(MVP_SCHEME_TYPES)
+  for (const p of products) {
+    const productSchemes = new Set<string>(
+      p.allowed_schemes && p.allowed_schemes.length > 0 ? p.allowed_schemes : MVP_SCHEME_TYPES
+    )
+    intersection = new Set([...intersection].filter(s => productSchemes.has(s)))
+    if (intersection.size === 0) break
+  }
+  return MVP_SCHEME_TYPES.filter(s => intersection.has(s))
+}
+
 export default function NewProposalPage() {
   const navigate = useNavigate()
   const [currentStep, setCurrentStep] = useState(1)
@@ -53,6 +71,12 @@ export default function NewProposalPage() {
       return [...prev, product]
     })
   }
+
+  // When selected products change, drop any scheme that is no longer valid.
+  useEffect(() => {
+    const allowed = computeAllowedSchemes(selectedProducts)
+    setSelectedSchemes(prev => prev.filter(s => allowed.includes(s.scheme_type)))
+  }, [selectedProducts])
 
   const currentDateSuffix = (() => {
     const d = new Date()
@@ -212,9 +236,10 @@ export default function NewProposalPage() {
               <span className="bg-quipux-blue text-white w-8 h-8 rounded-full inline-flex items-center justify-center mr-3 text-sm">2</span>
               Configurar Esquemas Comerciales
             </h3>
-            <SchemeSelector 
+            <SchemeSelector
               initialSchemes={selectedSchemes}
               initialCombine={combineSchemes}
+              allowedSchemes={computeAllowedSchemes(selectedProducts)}
               onSchemesChanged={(schemes, combine) => {
                 setSelectedSchemes(schemes)
                 setCombineSchemes(combine)
