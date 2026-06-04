@@ -43,6 +43,19 @@
   - `.opencode/skills/*.md` — si cambia la API pública de un servicio, estructura de documento, esquemas o terminología
   - `.opencode/ARCHITECTURE.md` — si cambia la arquitectura, número de pestañas del editor, reglas no-obvias del dominio o la matriz de cobertura
 
+## ⚠️ NO Engram, NO Gentle AI
+
+**PROHIBIDO usar memoria persistente (engram) ni orchestración (Gentle AI) en este proyecto.**
+
+- ❌ NO llamar a `mem_save`, `mem_search`, `mem_get_observation`, o cualquier MCP de engram
+- ❌ NO usar el tool `Agent` para delegar a sub-agents
+- ❌ NO usar comandos `/sdd-*` que dependan de engram u orchestración
+- ❌ NO usar `Agent` tool — es parte de Gentle AI
+
+**Todas las decisiones, descubrimientos y contexto viven en la conversación actual.** Cada sesión comienza sin estado persistente.
+
+**Razón:** Enfoque directo, conversación transparente, control total del usuario sobre el flujo de trabajo.
+
 ## Backend (FastAPI)
 - **Modelos vs Schemas:** Separación clara entre modelos de BD (`app/models/`) y schemas Pydantic (`app/schemas/`).
 - **Lógica de negocio:** Los routers deben ser delgados. Toda lógica compleja reside en `app/services/`.
