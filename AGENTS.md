@@ -32,7 +32,7 @@
 
 ## Reglas Generales
 - **Idiomas:** Código y comentarios técnicos en inglés. Documentación de usuario, mensajes de error para el cliente y contenido de propuestas en **español**.
-- **Commits:** Los mensajes de commit (título, descripción y cualquier anotación) deben estar **siempre en español**.
+- **Commits y Push:** Los mensajes de commit (título, descripción y cualquier anotación) deben estar **siempre en español**. **⚠️ No hacer commit ni push hasta que el usuario lo autorice explícitamente.**
 - **Seguridad:** Nunca incluir secretos en el código. Usar `.env` (jamás subirlo). Revisar `.gitignore` antes de hacer commit.
 - **Permisos de bash:** `pytest*` y `npm test*` se ejecutan sin preguntar; `uvicorn`, `npm run dev`, instalaciones requieren confirmación.
 - **Pruebas unitarias obligatorias:** Todo código nuevo — tanto en Backend como en Frontend — **debe** ir acompañado de pruebas unitarias en el mismo PR/commit. No se considera completa ninguna funcionalidad sin su cobertura de tests. Ver sección [Testing](#testing) para las convenciones de cada capa.
