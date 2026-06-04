@@ -1,5 +1,29 @@
 # Reglas de Desarrollo - Innti Propuestas
 
+## 📋 Metodología: SDD (Spec-Driven Development)
+
+**Desde 2026-06-03, TODOS los desarrollos DEBEN hacerse con SDD.**
+
+### Flujo obligatorio:
+1. **Exploration** (`/sdd-explore`) — Investigar la idea
+2. **Proposal** (`/sdd-propose`) — Formalizar la propuesta
+3. **Specification** (`/sdd-spec`) — Escribir requerimientos y escenarios
+4. **Design** (`/sdd-design`) — Decisiones arquitectónicas
+5. **Tasks** (`/sdd-tasks`) — Desglose en tareas verificables
+6. **Apply** (`/sdd-apply`) — Implementación guiada por tasks
+7. **Verify** (`/sdd-verify`) — Validación contra specs
+8. **Archive** (`/sdd-archive`) — Cierre y persistencia de artifacts
+
+### Excepciones permitidas:
+- **Bugs críticos en producción:** Ir directamente a apply/fix con contexto explícito
+- **Cambios triviales:** Typos, actualizaciones de documentación menor, cambios de configuración sin lógica
+
+### Artifact Store:
+- **Por defecto:** `openspec` (committable, para team review en `openspec/changes/`)
+- **Descripción:** Los artifacts (proposal, spec, design, tasks, apply-progress, verify-report) se guardan en archivos para que el equipo pueda revisar y auditar
+
+---
+
 ## Stack Tecnológico
 - **Backend:** FastAPI, SQLAlchemy (SQLite), Pydantic v2, pydantic-settings.
 - **Frontend:** React 18, TypeScript, Vite, Tailwind CSS, TipTap (rich text editor).
@@ -8,15 +32,29 @@
 
 ## Reglas Generales
 - **Idiomas:** Código y comentarios técnicos en inglés. Documentación de usuario, mensajes de error para el cliente y contenido de propuestas en **español**.
-- **Commits:** Los mensajes de commit (título, descripción y cualquier anotación) deben estar **siempre en español**.
+- **Commits y Push:** Los mensajes de commit (título, descripción y cualquier anotación) deben estar **siempre en español**. **⚠️ No hacer commit ni push hasta que el usuario lo autorice explícitamente.**
 - **Seguridad:** Nunca incluir secretos en el código. Usar `.env` (jamás subirlo). Revisar `.gitignore` antes de hacer commit.
 - **Permisos de bash:** `pytest*` y `npm test*` se ejecutan sin preguntar; `uvicorn`, `npm run dev`, instalaciones requieren confirmación.
 - **Pruebas unitarias obligatorias:** Todo código nuevo — tanto en Backend como en Frontend — **debe** ir acompañado de pruebas unitarias en el mismo PR/commit. No se considera completa ninguna funcionalidad sin su cobertura de tests. Ver sección [Testing](#testing) para las convenciones de cada capa.
+- **Skills y Agents on-demand:** Si durante el desarrollo se necesita un skill o agent que no existe, créalo en lugar de reportarlo. Ambas herramientas (Claude Code y openCode) deben usar las mismas definiciones.
 - **Documentación siempre actualizada:** Después de crear o modificar **cualquier** archivo de código, revisar y actualizar la documentación del proyecto para que refleje los cambios. Los archivos a verificar son:
   - `AGENTS.md` — si cambia stack, reglas, convenciones o flujos técnicos
   - `.opencode/agents/*.md` — si cambia el comportamiento de un agente
   - `.opencode/skills/*.md` — si cambia la API pública de un servicio, estructura de documento, esquemas o terminología
   - `.opencode/ARCHITECTURE.md` — si cambia la arquitectura, número de pestañas del editor, reglas no-obvias del dominio o la matriz de cobertura
+
+## ⚠️ NO Engram, NO Gentle AI
+
+**PROHIBIDO usar memoria persistente (engram) ni orchestración (Gentle AI) en este proyecto.**
+
+- ❌ NO llamar a `mem_save`, `mem_search`, `mem_get_observation`, o cualquier MCP de engram
+- ❌ NO usar el tool `Agent` para delegar a sub-agents
+- ❌ NO usar comandos `/sdd-*` que dependan de engram u orchestración
+- ❌ NO usar `Agent` tool — es parte de Gentle AI
+
+**Todas las decisiones, descubrimientos y contexto viven en la conversación actual.** Cada sesión comienza sin estado persistente.
+
+**Razón:** Enfoque directo, conversación transparente, control total del usuario sobre el flujo de trabajo.
 
 ## Backend (FastAPI)
 - **Modelos vs Schemas:** Separación clara entre modelos de BD (`app/models/`) y schemas Pydantic (`app/schemas/`).
@@ -107,6 +145,14 @@ DRAFT ──► PENDING_REVIEW ──► REVIEWED ──► PENDING_VP ──►
 - Fuente de verdad: `ListaPortafolio.xlsx` (raíz del proyecto).
 - Servicio: `app/services/portfolio_service.py` → clase `PortfolioService`.
 - El campo `portfolio_file_path` en `config.py` apunta a este archivo.
+- **Columna 9 — Esquemas Permitidos:** columna opcional en el Excel (índice 9, hoja "Hoja2") con valores separados por coma (ej: `"licensing,services"`). Si la celda está vacía o la columna no existe, el producto admite todos los MVP schemes. Este campo controla qué esquemas aparecen disponibles en el paso 2 de creación de propuesta.
+
+### Relación Producto → Esquemas Comerciales
+- Los esquemas disponibles en el paso 2 de `NewProposalPage` se filtran según los productos seleccionados en el paso 1.
+- **Cálculo:** INTERSECCIÓN de los `allowed_schemes` de todos los productos seleccionados. Solo se muestran esquemas válidos para TODOS los productos. Un producto sin restricciones aporta todos los MVP schemes (no estrecha el conjunto). Si la intersección es vacía, se muestra un aviso y el usuario no puede avanzar.
+- **Frontend:** `SchemeSelector` recibe prop `allowedSchemes?: string[]` y oculta los esquemas no incluidos.
+- **Backend:** `POST /api/proposals/` valida que todos los esquemas enviados estén en el conjunto permitido para los productos. Retorna 422 si hay incompatibilidad.
+- **Retrocompatibilidad:** si la columna 9 no existe en el Excel, todos los productos tienen `allowed_schemes = []` → todos los MVP schemes son válidos → comportamiento idéntico al anterior.
 
 ## Testing
 

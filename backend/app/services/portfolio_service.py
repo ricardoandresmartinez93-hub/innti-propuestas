@@ -2,11 +2,14 @@
 Servicio de lectura del portafolio de soluciones desde Excel.
 Lee ListaPortafolio.xlsx y expone los productos disponibles.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Optional
 from pathlib import Path
 
 import openpyxl
+
+# Scheme types available in the MVP (string values matching SchemeType enum)
+MVP_SCHEME_STRINGS: List[str] = ["licensing", "services", "support_maintenance"]
 
 
 @dataclass
@@ -23,6 +26,9 @@ class PortfolioProduct:
     country: str
     # Categoría opcional proveniente de la propuesta (ej: "nuevo", "modernización")
     category: str = ""
+    # Comma-separated scheme types allowed for this product (col 9 in Excel).
+    # Empty list means all MVP schemes are allowed.
+    allowed_schemes: List[str] = field(default_factory=list)
 
 
 class PortfolioNotFoundError(Exception):
@@ -80,6 +86,15 @@ class PortfolioService:
             if not name:
                 continue
 
+            # Column 9: allowed_schemes — comma-separated scheme types.
+            # Empty or missing → all MVP schemes are allowed.
+            raw_schemes = row[9] if len(row) > 9 else None
+            if raw_schemes:
+                parsed = [s.strip() for s in str(raw_schemes).split(",") if s.strip()]
+                allowed_schemes = [s for s in parsed if s in MVP_SCHEME_STRINGS]
+            else:
+                allowed_schemes = []
+
             product = PortfolioProduct(
                 name=str(name).strip(),
                 product_type=str(row[1] or "").strip(),
@@ -90,6 +105,7 @@ class PortfolioService:
                 monetization_model=str(row[6] or "").strip(),
                 pricing_model=str(row[7] or "").strip(),
                 country=str(row[8] or "").strip(),
+                allowed_schemes=allowed_schemes,
             )
             products.append(product)
 
@@ -119,3 +135,31 @@ class PortfolioService:
         products = self.get_products()
         name_set = {n.lower() for n in names}
         return [p for p in products if p.name.lower() in name_set]
+
+    def get_allowed_schemes_for_products(self, product_names: List[str]) -> List[str]:
+        """Returns the intersection of allowed schemes across the given product names.
+
+        A product with no scheme restrictions (empty allowed_schemes or not found)
+        contributes all MVP schemes to the intersection — it does not restrict anything.
+        Returns an empty list when product_names is empty.
+        An empty result means the selected products have no schemes in common.
+        """
+        if not product_names:
+            return []
+
+        all_products = self.get_products()
+        product_map = {p.name.lower(): p for p in all_products}
+
+        result: set = set(MVP_SCHEME_STRINGS)
+        for name in product_names:
+            product = product_map.get(name.lower())
+            if product is None or not product.allowed_schemes:
+                # No restriction → contributes all MVP schemes; does not narrow the set
+                product_schemes = set(MVP_SCHEME_STRINGS)
+            else:
+                product_schemes = set(product.allowed_schemes)
+            result &= product_schemes
+            if not result:
+                return []
+
+        return sorted(result, key=lambda s: MVP_SCHEME_STRINGS.index(s) if s in MVP_SCHEME_STRINGS else 999)

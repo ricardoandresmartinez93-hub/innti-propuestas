@@ -17,12 +17,50 @@ from app.schemas.proposal import (
     ProposalProductCreate, ProposalProductRead,
     ProposalSchemeRead, ProposalSchemeUpdate,
 )
+from app.routers.portfolio import get_portfolio_service
+from app.services.portfolio_service import MVP_SCHEME_STRINGS
 
 router = APIRouter(prefix="/api/proposals", tags=["Propuestas"])
 
 
+def _validate_scheme_product_compatibility(
+    product_names: List[str],
+    scheme_types: List[SchemeType],
+    portfolio_service,
+) -> None:
+    """Raises HTTP 422 if any scheme is not allowed for the given products.
+
+    Uses a lenient fallback: if a product is not found in the portfolio or has
+    no scheme restrictions, all MVP schemes are treated as valid for that product.
+    This preserves backward compatibility when the Excel lacks the column.
+    """
+    if not product_names or not scheme_types:
+        return
+
+    allowed_schemes = portfolio_service.get_allowed_schemes_for_products(product_names)
+    # Empty result means all MVP schemes are valid (no restriction)
+    if not allowed_schemes:
+        allowed_schemes = list(MVP_SCHEME_STRINGS)
+
+    invalid = [s.value for s in scheme_types if s.value not in allowed_schemes]
+    if invalid:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Los siguientes esquemas no están permitidos para los productos seleccionados: "
+                f"{', '.join(invalid)}. "
+                f"Esquemas permitidos: {', '.join(allowed_schemes)}"
+            ),
+        )
+
+
 @router.post("/", response_model=ProposalRead, status_code=status.HTTP_201_CREATED)
-def create_proposal(data: ProposalCreate, db: Session = Depends(get_db), current_user: User = Depends(require_creator)):
+def create_proposal(
+    data: ProposalCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_creator),
+    portfolio_svc=Depends(get_portfolio_service),
+):
     """Crea una nueva propuesta comercial."""
     # Validar esquemas MVP
     for scheme in data.schemes:
@@ -32,6 +70,13 @@ def create_proposal(data: ProposalCreate, db: Session = Depends(get_db), current
                 detail=f"El esquema '{scheme.scheme_type}' no está disponible en el MVP. "
                        f"Esquemas válidos: licensing, services, support_maintenance"
             )
+
+    # Validar compatibilidad esquema-producto según el portafolio
+    _validate_scheme_product_compatibility(
+        product_names=[p.product_name for p in data.products],
+        scheme_types=[s.scheme_type for s in data.schemes],
+        portfolio_service=portfolio_svc,
+    )
 
     # Verificar que el cliente existe
     client = db.query(Client).filter(Client.id == data.client_id).first()

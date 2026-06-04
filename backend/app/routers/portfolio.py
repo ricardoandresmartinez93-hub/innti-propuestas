@@ -19,6 +19,8 @@ class PortfolioProductResponse(BaseModel):
     monetization_model: str
     pricing_model: str
     country: str
+    # Scheme types allowed for this product. Empty list = all MVP schemes allowed.
+    allowed_schemes: List[str] = []
 
 
 def get_portfolio_service(settings: Settings = Depends(get_settings)):
@@ -50,6 +52,7 @@ def list_products(
             monetization_model=p.monetization_model,
             pricing_model=p.pricing_model,
             country=p.country,
+            allowed_schemes=p.allowed_schemes,
         )
         for p in products
     ]

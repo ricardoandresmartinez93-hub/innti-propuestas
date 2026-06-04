@@ -11,6 +11,8 @@ export interface PortfolioProduct {
   monetization_model: string
   pricing_model: string
   country: string
+  /** Scheme types allowed for this product. Undefined or empty = all MVP schemes. */
+  allowed_schemes?: string[]
 }
 
 // --- Esquemas ---
