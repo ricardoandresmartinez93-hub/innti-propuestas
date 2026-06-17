@@ -3,7 +3,8 @@ Endpoints CRUD para propuestas comerciales.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
+from sqlalchemy import func
+from typing import List, Dict
 
 from app.database import get_db
 from app.models.user import User
@@ -139,6 +140,21 @@ def list_proposals(
         .all()
     )
     return proposals
+
+
+@router.get("/stats", response_model=Dict[str, int])
+def get_proposal_stats(db: Session = Depends(get_db)):
+    """Returns proposal counts grouped by status."""
+    rows = (
+        db.query(Proposal.status, func.count(Proposal.id))
+        .group_by(Proposal.status)
+        .all()
+    )
+    result: Dict[str, int] = {s.value: 0 for s in ProposalStatus}
+    for row_status, count in rows:
+        key = row_status.value if hasattr(row_status, "value") else str(row_status)
+        result[key] = count
+    return result
 
 
 @router.get("/{proposal_id}", response_model=ProposalRead)

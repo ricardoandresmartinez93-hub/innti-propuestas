@@ -191,6 +191,17 @@ export interface UserCreate {
   password: string
 }
 
+// --- Stats ---
+export interface ProposalStats {
+  draft: number
+  pending_review: number
+  reviewed: number
+  pending_vp: number
+  approved: number
+  rejected: number
+  sent_to_client: number
+}
+
 export interface UserUpdate {
   full_name?: string
   email?: string

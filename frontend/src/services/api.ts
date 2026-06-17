@@ -8,6 +8,7 @@ import type {
   ProposalCreate,
   ProposalScheme,
   ProposalSchemeUpdate,
+  ProposalStats,
   Client,
   ClientCreate,
   Approval,
@@ -49,6 +50,9 @@ export const portfolioApi = {
 export const proposalApi = {
   list: (skip = 0, limit = 50) =>
     api.get<Proposal[]>('/proposals/', { params: { skip, limit } }),
+
+  stats: () =>
+    api.get<ProposalStats>('/proposals/stats'),
 
   get: (id: number) =>
     api.get<Proposal>(`/proposals/${id}`),

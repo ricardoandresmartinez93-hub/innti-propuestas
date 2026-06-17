@@ -1,6 +1,6 @@
 import { Routes, Route } from 'react-router-dom'
 import Layout from './components/Layout'
-import HomePage from './pages/HomePage'
+import DashboardPage from './pages/DashboardPage'
 import NewProposalPage from './pages/NewProposalPage'
 import ProposalListPage from './pages/ProposalListPage'
 import ProposalDetailPage from './pages/ProposalDetailPage'
@@ -15,7 +15,7 @@ function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-          <Route index element={<HomePage />} />
+          <Route index element={<DashboardPage />} />
           <Route path="proposals" element={<ProposalListPage />} />
           <Route path="proposals/new" element={<ProtectedRoute allowedRoles={['creator']}><NewProposalPage /></ProtectedRoute>} />
           <Route path="proposals/:id" element={<ProposalDetailPage />} />
