@@ -135,6 +135,7 @@ Estas son las cosas que son fáciles de equivocar si no se leyó el código real
 | Validación pre-commit | — | — | ✅ |
 | Automatización completa | — | — | ✅ |
 | Relación Producto → Esquemas | ✅ | ✅ | — |
+| Filtros y búsqueda en lista | ✅ | — | — |
 
 ---
 

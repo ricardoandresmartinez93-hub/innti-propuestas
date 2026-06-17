@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, cleanup, within } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import { MemoryRouter } from 'react-router-dom'
 import ProposalListPage from '../pages/ProposalListPage'
@@ -29,6 +29,7 @@ const mockProposals: Proposal[] = [
     status: 'draft',
     combine_schemes: false,
     client_id: 1,
+    client_entity: 'Municipio de Bogotá',
     products: [],
     schemes: [],
     created_at: '2024-01-01T10:00:00Z',
@@ -41,6 +42,7 @@ const mockProposals: Proposal[] = [
     status: 'approved',
     combine_schemes: true,
     client_id: 2,
+    client_entity: 'Gobernación Antioquia',
     products: [],
     schemes: [],
     created_at: '2024-02-01T10:00:00Z',
@@ -53,6 +55,7 @@ const mockProposals: Proposal[] = [
     status: 'rejected',
     combine_schemes: false,
     client_id: 1,
+    client_entity: 'Municipio de Bogotá',
     products: [],
     schemes: [],
     created_at: '2024-03-01T10:00:00Z',
@@ -116,9 +119,11 @@ describe('ProposalListPage', () => {
     renderPage()
     await waitForLoad()
 
-    const draftBadge = screen.getAllByText('Borrador')[0]
-    const approvedBadge = screen.getAllByText('Aprobada')[0]
-    const rejectedBadge = screen.getAllByText('Rechazada')[0]
+    // Scope to the table body to avoid matching <option> elements in the status select
+    const tbody = screen.getByRole('table').querySelector('tbody')!
+    const draftBadge = within(tbody).getByText('Borrador')
+    const approvedBadge = within(tbody).getByText('Aprobada')
+    const rejectedBadge = within(tbody).getByText('Rechazada')
 
     expect(draftBadge).toHaveClass('bg-gray-100')
     expect(approvedBadge).toHaveClass('bg-green-100')
@@ -231,5 +236,76 @@ describe('ProposalListPage', () => {
     renderPage()
     await waitForLoad()
     expect(screen.queryByTestId('delete-btn-1')).not.toBeInTheDocument()
+  })
+
+  // ── Filtros y búsqueda ────────────────────────────────────────────────────
+
+  it('F-1: renders filter bar and result count', async () => {
+    vi.mocked(proposalApi.list).mockResolvedValue({ data: mockProposals } as never)
+    renderPage()
+    await waitForLoad()
+
+    expect(screen.getByTestId('search-input')).toBeInTheDocument()
+    expect(screen.getByTestId('status-filter')).toBeInTheDocument()
+    expect(screen.getByTestId('result-count')).toHaveTextContent('3 propuestas')
+    expect(screen.queryByTestId('clear-filters')).not.toBeInTheDocument()
+  })
+
+  it('F-2: selecting status calls list with status param', async () => {
+    vi.mocked(proposalApi.list).mockResolvedValue({ data: [] } as never)
+    renderPage()
+    await waitForLoad()
+    vi.mocked(proposalApi.list).mockClear()
+
+    fireEvent.change(screen.getByTestId('status-filter'), { target: { value: 'draft' } })
+
+    await waitFor(() => {
+      expect(proposalApi.list).toHaveBeenCalledWith(0, 50, 'draft', undefined)
+    })
+  })
+
+  it('F-3: typing in search triggers debounced api call with q param', async () => {
+    vi.mocked(proposalApi.list).mockResolvedValue({ data: [] } as never)
+    renderPage()
+    await waitForLoad()
+    vi.mocked(proposalApi.list).mockClear()
+
+    fireEvent.change(screen.getByTestId('search-input'), { target: { value: 'quipux' } })
+
+    await waitFor(
+      () => { expect(proposalApi.list).toHaveBeenCalledWith(0, 50, undefined, 'quipux') },
+      { timeout: 500 },
+    )
+  })
+
+  it('F-4: Limpiar button appears with active filter and resets on click', async () => {
+    vi.mocked(proposalApi.list).mockResolvedValue({ data: [] } as never)
+    renderPage()
+    await waitForLoad()
+
+    // No active filters → button hidden
+    expect(screen.queryByTestId('clear-filters')).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByTestId('status-filter'), { target: { value: 'approved' } })
+    await waitForLoad()
+
+    // Filter active → button visible
+    expect(screen.getByTestId('clear-filters')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('clear-filters'))
+
+    await waitFor(() => {
+      expect((screen.getByTestId('status-filter') as HTMLSelectElement).value).toBe('')
+    })
+    expect(screen.queryByTestId('clear-filters')).not.toBeInTheDocument()
+  })
+
+  it('F-5: shows client_entity column in table rows', async () => {
+    vi.mocked(proposalApi.list).mockResolvedValue({ data: mockProposals } as never)
+    renderPage()
+    await waitForLoad()
+
+    expect(screen.getAllByText('Municipio de Bogotá')).toHaveLength(2)
+    expect(screen.getByText('Gobernación Antioquia')).toBeInTheDocument()
   })
 })

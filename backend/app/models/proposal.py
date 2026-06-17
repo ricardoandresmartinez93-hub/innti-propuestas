@@ -4,6 +4,7 @@ Modelos de Propuesta Comercial.
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
+from typing import Optional
 import enum
 
 from app.database import Base
@@ -76,6 +77,10 @@ class Proposal(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))
+
+    @property
+    def client_entity(self) -> Optional[str]:
+        return self.client.entity if self.client else None
 
     def __repr__(self) -> str:
         return f"<Proposal(id={self.id}, title='{self.title}', status='{self.status}')>"

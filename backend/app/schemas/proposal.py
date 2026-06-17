@@ -115,6 +115,7 @@ class ProposalRead(BaseModel):
     context_content: Optional[str] = None
     confidentiality: Optional[str] = None
     client_id: int
+    client_entity: Optional[str] = None
     products: List[ProposalProductRead] = []
     schemes: List[ProposalSchemeRead] = []
     created_at: datetime

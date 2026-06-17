@@ -48,8 +48,12 @@ export const portfolioApi = {
 
 // --- Propuestas ---
 export const proposalApi = {
-  list: (skip = 0, limit = 50) =>
-    api.get<Proposal[]>('/proposals/', { params: { skip, limit } }),
+  list: (skip = 0, limit = 50, status?: ProposalStatus, q?: string) => {
+    const params: Record<string, string | number> = { skip, limit }
+    if (status) params.status = status
+    if (q) params.q = q
+    return api.get<Proposal[]>('/proposals/', { params })
+  },
 
   stats: () =>
     api.get<ProposalStats>('/proposals/stats'),

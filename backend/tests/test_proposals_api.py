@@ -331,3 +331,89 @@ def test_create_proposal_multiple_schemes_all_allowed(
     response = client.post("/api/proposals/", json=proposal_data, headers=creator_headers)
     assert response.status_code == status.HTTP_201_CREATED
     assert len(response.json()["schemes"]) == 2
+
+
+# ── Tests de filtros y búsqueda ───────────────────────────────────────────────
+
+def _create_proposal(client_fixture, creator_headers, client_data, title, code, scheme="licensing"):
+    """Helper: crea un cliente y una propuesta, retorna el JSON de la propuesta."""
+    client_res = client_fixture.post("/api/clients/", json=client_data)
+    client_id = client_res.json()["id"]
+    data = {
+        "title": title,
+        "code": code,
+        "client_id": client_id,
+        "combine_schemes": True,
+        "products": [],
+        "schemes": [{"scheme_type": scheme, "payment_frequency": "unico"}],
+    }
+    return client_fixture.post("/api/proposals/", json=data, headers=creator_headers).json()
+
+
+def test_list_filter_by_status(client, creator_headers):
+    """B-2: ?status=draft devuelve solo propuestas en estado draft."""
+    client_data_a = {"name": "Cliente A", "entity": "Entidad A"}
+    client_data_b = {"name": "Cliente B", "entity": "Entidad B"}
+
+    prop_a = _create_proposal(client, creator_headers, client_data_a, "Propuesta Alpha", "AA-001")
+    prop_b = _create_proposal(client, creator_headers, client_data_b, "Propuesta Beta", "BB-002")
+
+    # Avanzar prop_b a pending_review
+    client.post(f"/api/proposals/{prop_b['id']}/submit-review")
+
+    res = client.get("/api/proposals/?status=draft")
+    assert res.status_code == status.HTTP_200_OK
+    ids = [p["id"] for p in res.json()]
+    assert prop_a["id"] in ids
+    assert prop_b["id"] not in ids
+
+
+def test_list_filter_by_text_title(client, creator_headers):
+    """B-3: ?q=<texto> filtra por título (case-insensitive)."""
+    client_data_a = {"name": "Cliente A", "entity": "Entidad A"}
+    client_data_b = {"name": "Cliente B", "entity": "Entidad B"}
+
+    prop_match = _create_proposal(client, creator_headers, client_data_a, "Licenciamiento Quipux", "QX-001")
+    _create_proposal(client, creator_headers, client_data_b, "Soporte Técnico", "ST-002")
+
+    res = client.get("/api/proposals/?q=quipux")
+    assert res.status_code == status.HTTP_200_OK
+    data = res.json()
+    assert len(data) == 1
+    assert data[0]["id"] == prop_match["id"]
+
+
+def test_list_filter_by_text_client_entity(client, creator_headers):
+    """B-3: ?q=<texto> también filtra por entidad del cliente."""
+    client_data_match = {"name": "Juan Pérez", "entity": "Municipio de Bogotá"}
+    client_data_other = {"name": "Ana López", "entity": "Gobernación Antioquia"}
+
+    prop_match = _create_proposal(client, creator_headers, client_data_match, "Propuesta X", "PX-001")
+    _create_proposal(client, creator_headers, client_data_other, "Propuesta Y", "PY-002")
+
+    res = client.get("/api/proposals/?q=bogot")
+    assert res.status_code == status.HTTP_200_OK
+    data = res.json()
+    assert len(data) == 1
+    assert data[0]["id"] == prop_match["id"]
+
+
+def test_list_filter_combined_and_client_entity_in_response(client, creator_headers):
+    """B-4 + B-5: filtros combinados status+q, respuesta incluye client_entity."""
+    client_data = {"name": "Pedro Gómez", "entity": "Alcaldía de Medellín"}
+
+    prop = _create_proposal(client, creator_headers, client_data, "Sistemas de Tránsito", "TR-001")
+    # Avanzar a pending_review para que quede excluido del filtro status=draft
+    _create_proposal(
+        client, creator_headers,
+        {"name": "Luis Torres", "entity": "Alcaldía de Cali"},
+        "Sistemas de Tránsito Cali", "TR-002",
+    )
+
+    # Solo draft + contiene "medellín"
+    res = client.get("/api/proposals/?status=draft&q=medell%C3%ADn")
+    assert res.status_code == status.HTTP_200_OK
+    data = res.json()
+    assert len(data) == 1
+    assert data[0]["id"] == prop["id"]
+    assert data[0]["client_entity"] == "Alcaldía de Medellín"

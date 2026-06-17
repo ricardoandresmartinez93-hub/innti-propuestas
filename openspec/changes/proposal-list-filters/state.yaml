@@ -1,0 +1,12 @@
+change: proposal-list-filters
+status: applied
+date: 2026-06-17
+
+phases_completed:
+  - proposal
+  - spec
+  - design
+  - tasks
+  - apply
+
+verify_pending: true

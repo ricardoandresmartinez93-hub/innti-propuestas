@@ -3,8 +3,8 @@ Endpoints CRUD para propuestas comerciales.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import func
-from typing import List, Dict
+from sqlalchemy import func, or_
+from typing import List, Dict, Optional
 
 from app.database import get_db
 from app.models.user import User
@@ -129,17 +129,30 @@ def create_proposal(
 
 @router.get("/", response_model=List[ProposalRead])
 def list_proposals(
-    skip: int = 0, limit: int = 50, db: Session = Depends(get_db)
+    skip: int = 0,
+    limit: int = 50,
+    status: Optional[ProposalStatus] = None,
+    q: Optional[str] = None,
+    db: Session = Depends(get_db),
 ):
-    """Lista todas las propuestas."""
-    proposals = (
-        db.query(Proposal)
-        .order_by(Proposal.updated_at.desc())
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
-    return proposals
+    """Lista propuestas con filtros opcionales por estado y búsqueda de texto."""
+    query = db.query(Proposal).outerjoin(Proposal.client)
+
+    if status is not None:
+        query = query.filter(Proposal.status == status)
+
+    if q:
+        term = f"%{q}%"
+        query = query.filter(
+            or_(
+                Proposal.title.ilike(term),
+                Proposal.code.ilike(term),
+                Client.entity.ilike(term),
+                Client.name.ilike(term),
+            )
+        )
+
+    return query.order_by(Proposal.updated_at.desc()).offset(skip).limit(limit).all()
 
 
 @router.get("/stats", response_model=Dict[str, int])

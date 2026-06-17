@@ -106,6 +106,7 @@ export interface Proposal {
   code?: string
   status: ProposalStatus
   combine_schemes: boolean
+  client_entity?: string
   // Globales — compartidos por todos los esquemas de la propuesta
   cover_title?: string
   letter_content?: string

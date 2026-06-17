@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { proposalApi } from '../services/api'
 import { STATUS_LABELS } from '../types'
@@ -6,14 +6,16 @@ import type { Proposal, ProposalStatus } from '../types'
 import { useAuth } from '../contexts/AuthContext'
 
 const STATUS_COLORS: Record<ProposalStatus, string> = {
-  draft: 'bg-gray-100 text-gray-800',
+  draft:          'bg-gray-100 text-gray-800',
   pending_review: 'bg-yellow-100 text-yellow-800',
-  reviewed: 'bg-blue-100 text-blue-800',
-  pending_vp: 'bg-orange-100 text-orange-800',
-  approved: 'bg-green-100 text-green-800',
-  rejected: 'bg-red-100 text-red-800',
+  reviewed:       'bg-blue-100 text-blue-800',
+  pending_vp:     'bg-orange-100 text-orange-800',
+  approved:       'bg-green-100 text-green-800',
+  rejected:       'bg-red-100 text-red-800',
   sent_to_client: 'bg-purple-100 text-purple-800',
 }
+
+const ALL_STATUSES = Object.keys(STATUS_LABELS) as ProposalStatus[]
 
 export default function ProposalListPage() {
   const { user } = useAuth()
@@ -23,12 +25,25 @@ export default function ProposalListPage() {
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
+  const [statusFilter, setStatusFilter] = useState<ProposalStatus | ''>('')
+  const [searchText, setSearchText] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+
   useEffect(() => {
-    proposalApi.list()
+    const timer = setTimeout(() => setDebouncedSearch(searchText), 300)
+    return () => clearTimeout(timer)
+  }, [searchText])
+
+  const fetchProposals = useCallback(() => {
+    setLoading(true)
+    proposalApi
+      .list(0, 50, statusFilter || undefined, debouncedSearch || undefined)
       .then((res) => setProposals(res.data))
       .catch(console.error)
       .finally(() => setLoading(false))
-  }, [])
+  }, [statusFilter, debouncedSearch])
+
+  useEffect(() => { fetchProposals() }, [fetchProposals])
 
   const handleDelete = async () => {
     if (!confirmDelete) return
@@ -50,13 +65,17 @@ export default function ProposalListPage() {
     setDeleteError(null)
   }
 
-  if (loading) {
-    return <div className="text-center py-8 text-gray-500">Cargando propuestas...</div>
+  const hasActiveFilters = statusFilter !== '' || searchText !== ''
+
+  const clearFilters = () => {
+    setStatusFilter('')
+    setSearchText('')
   }
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
+      {/* Header */}
+      <div className="flex justify-between items-center mb-4">
         <h2 className="text-2xl font-bold text-quipux-dark">Propuestas</h2>
         <Link
           to="/proposals/new"
@@ -66,12 +85,63 @@ export default function ProposalListPage() {
         </Link>
       </div>
 
-      {proposals.length === 0 ? (
+      {/* Filter bar */}
+      <div className="flex flex-col sm:flex-row gap-2 mb-4">
+        <input
+          type="text"
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          placeholder="Buscar por título, código o cliente…"
+          className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+          data-testid="search-input"
+        />
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as ProposalStatus | '')}
+          className="border border-gray-300 rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+          data-testid="status-filter"
+        >
+          <option value="">Todos los estados</option>
+          {ALL_STATUSES.map((s) => (
+            <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+          ))}
+        </select>
+        {hasActiveFilters && (
+          <button
+            onClick={clearFilters}
+            className="px-3 py-2 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
+            data-testid="clear-filters"
+          >
+            Limpiar
+          </button>
+        )}
+      </div>
+
+      {/* Result count */}
+      {!loading && (
+        <p className="text-xs text-gray-500 mb-3" data-testid="result-count">
+          {proposals.length === 1
+            ? '1 propuesta'
+            : `${proposals.length} propuestas`}
+          {hasActiveFilters && ' (filtradas)'}
+        </p>
+      )}
+
+      {/* Table / empty state */}
+      {loading ? (
+        <div className="text-center py-8 text-gray-500">Cargando propuestas...</div>
+      ) : proposals.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-lg border">
-          <p className="text-gray-500 mb-4">No hay propuestas creadas aún.</p>
-          <Link to="/proposals/new" className="text-primary-600 hover:underline">
-            Crear la primera propuesta
-          </Link>
+          {hasActiveFilters ? (
+            <p className="text-gray-500 mb-4">No hay propuestas para los filtros aplicados.</p>
+          ) : (
+            <>
+              <p className="text-gray-500 mb-4">No hay propuestas creadas aún.</p>
+              <Link to="/proposals/new" className="text-primary-600 hover:underline">
+                Crear la primera propuesta
+              </Link>
+            </>
+          )}
         </div>
       ) : (
         <div className="bg-white rounded-lg border overflow-hidden">
@@ -80,6 +150,7 @@ export default function ProposalListPage() {
               <tr>
                 <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Código</th>
                 <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Título</th>
+                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Cliente</th>
                 <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Estado</th>
                 <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Fecha</th>
                 <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Acciones</th>
@@ -90,6 +161,7 @@ export default function ProposalListPage() {
                 <tr key={p.id} className="border-b hover:bg-gray-50">
                   <td className="px-4 py-3 text-sm font-mono">{p.code || '-'}</td>
                   <td className="px-4 py-3 text-sm">{p.title}</td>
+                  <td className="px-4 py-3 text-sm text-gray-500">{p.client_entity || '-'}</td>
                   <td className="px-4 py-3">
                     <span className={`text-xs px-2 py-1 rounded-full ${STATUS_COLORS[p.status]}`}>
                       {STATUS_LABELS[p.status]}
@@ -105,7 +177,7 @@ export default function ProposalListPage() {
                         className="text-xs px-3 py-1.5 rounded-md bg-primary-50 text-primary-700 hover:bg-primary-100 font-medium"
                       >
                         Editar
-                        </Link>
+                      </Link>
                       {p.status === 'draft' && user?.role === 'creator' && (
                         <button
                           onClick={() => setConfirmDelete({ id: p.id, title: p.title })}
@@ -124,6 +196,7 @@ export default function ProposalListPage() {
         </div>
       )}
 
+      {/* Delete confirmation modal */}
       {confirmDelete !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6">
