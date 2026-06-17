@@ -156,7 +156,7 @@ Para crear los usuarios operativos del flujo de aprobación, ejecuta el siguient
 
 ```bash
 cd backend
-python seed_users.py
+python .\.venv\Scripts\python.exe seed_users.py
 ```
 
 Esto creará los siguientes usuarios (definidos en [`backend/seed_users.py`](backend/seed_users.py)):
