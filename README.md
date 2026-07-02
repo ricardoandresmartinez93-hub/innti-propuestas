@@ -122,9 +122,11 @@ Ver `backend/.env.example` para la lista completa de variables requeridas.
 ## Flujo de la Aplicación
 
 1. Seleccionar productos del portafolio (ListaPortafolio.xlsx)
-2. Elegir esquema(s) de propuesta
+2. Asignar un esquema a cada producto (un esquema por producto; los servicios
+   QloudSI no admiten Licenciamiento)
 3. Ingresar datos del cliente
-4. Generar documento con Innti (IA)
+4. Generar documento con Innti (IA) — unificado (1 documento con un bloque por
+   producto) o separado (un documento por producto)
 5. Editar secciones manuales (condiciones económicas)
 6. Enviar a aprobación (Ángela → Juan Pablo)
 7. Exportar PDF final
@@ -138,6 +140,9 @@ Ver `backend/.env.example` para la lista completa de variables requeridas.
 | Soporte y Mantenimiento | Anual |
 | Concesión o BPO | Variable |
 | Suministro | Variable |
+
+> **Regla de negocio:** los servicios QloudSI no pueden venderse bajo el esquema
+> de Licenciamiento. Las plataformas y demás productos del portafolio sí.
 
 ## Usuarios Iniciales
 

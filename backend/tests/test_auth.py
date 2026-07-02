@@ -113,10 +113,13 @@ def test_protected_endpoint_correct_role(test_user, db_session, client):
         json={
             "title": "Test Proposal",
             "client_id": client_obj.id,
-            "products": [],
-            "schemes": [
-                {"scheme_type": "licensing", "payment_frequency": "Pago único"}
-            ]
+            "products": [
+                {
+                    "product_name": "Producto Auth",
+                    "product_type": "Plataforma",
+                    "scheme": {"scheme_type": "licensing", "payment_frequency": "Pago único"},
+                }
+            ],
         },
         headers={"Authorization": f"Bearer {token}"}
     )

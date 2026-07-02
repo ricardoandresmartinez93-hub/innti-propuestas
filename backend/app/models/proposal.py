@@ -57,7 +57,7 @@ class Proposal(Base):
     )
     combine_schemes = Column(
         Boolean, default=True,
-        comment="True=combinar esquemas en un documento, False=documentos separados"
+        comment="True=documento unificado (bloques por producto), False=un documento por producto"
     )
 
     # Contenido global editable (HTML del editor TipTap)
@@ -72,6 +72,15 @@ class Proposal(Base):
     products = relationship("ProposalProduct", back_populates="proposal", cascade="all, delete-orphan")
     schemes = relationship("ProposalScheme", back_populates="proposal", cascade="all, delete-orphan")
     approvals = relationship("Approval", back_populates="proposal", cascade="all, delete-orphan")
+
+    @property
+    def uses_product_schemes(self) -> bool:
+        """True si la propuesta usa el modelo nuevo: esquemas vinculados a producto.
+
+        Las propuestas legadas (esquemas con product_id NULL) devuelven False y
+        conservan el flujo de generación por esquema.
+        """
+        return bool(self.schemes) and all(s.product_id is not None for s in self.schemes)
 
     # Timestamps
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
@@ -97,25 +106,39 @@ class ProposalProduct(Base):
     description = Column(Text, nullable=True, comment="Descripción de la solución")
     category = Column(String(200), nullable=True, comment="Categoría (nuevo/modernización)")
 
-    # Relación
+    # Relaciones
     proposal = relationship("Proposal", back_populates="products")
+    # Esquema propio del producto (modelo nuevo: 1 esquema por producto)
+    scheme = relationship(
+        "ProposalScheme",
+        back_populates="product",
+        uselist=False,
+        foreign_keys="ProposalScheme.product_id",
+    )
 
     def __repr__(self) -> str:
         return f"<ProposalProduct(id={self.id}, product='{self.product_name}')>"
 
 
 class ProposalScheme(Base):
-    """Esquema de propuesta seleccionado, con contenido propio por esquema.
+    """Esquema asignado a UN producto de la propuesta, con contenido propio.
 
-    Cada esquema (licensing, services, support_maintenance) tiene su propio alcance,
-    plazo, condiciones económicas, forma de pago, servicios excluidos y propiedad
-    intelectual. Cuando combine_schemes=False, cada esquema se exporta como un
-    documento independiente usando estos campos.
+    Modelo nuevo: cada producto tiene exactamente un esquema (product_id).
+    Cada esquema tiene su propio alcance, plazo, condiciones económicas, forma
+    de pago, servicios excluidos y propiedad intelectual. Cuando
+    combine_schemes=False, cada producto se exporta como documento independiente.
+
+    Propuestas legadas: filas con product_id NULL (esquemas a nivel propuesta,
+    previas a la migración) conservan el flujo de generación por esquema.
     """
     __tablename__ = "proposal_schemes"
 
     id = Column(Integer, primary_key=True, index=True)
     proposal_id = Column(Integer, ForeignKey("proposals.id"), nullable=False)
+    product_id = Column(
+        Integer, ForeignKey("proposal_products.id"), nullable=True, index=True,
+        comment="Producto al que pertenece este esquema (NULL en propuestas legadas)"
+    )
     scheme_type = Column(Enum(SchemeType), nullable=False, comment="Tipo de esquema")
     payment_frequency = Column(
         String(50), nullable=True,
@@ -130,8 +153,11 @@ class ProposalScheme(Base):
     excluded_services = Column(Text, nullable=True, comment="Servicios excluidos de este esquema (SaaS suele quedar vacío)")
     ip_section = Column(Text, nullable=True, comment="Propiedad intelectual aplicable a este esquema")
 
-    # Relación
+    # Relaciones
     proposal = relationship("Proposal", back_populates="schemes")
+    product = relationship(
+        "ProposalProduct", back_populates="scheme", foreign_keys=[product_id]
+    )
 
     def __repr__(self) -> str:
         return f"<ProposalScheme(id={self.id}, type='{self.scheme_type}')>"

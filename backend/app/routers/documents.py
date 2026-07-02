@@ -4,15 +4,20 @@ Endpoints para generación de documentos Word y PDF.
 El contenido de la propuesta se resuelve por esquema vía
 ``proposal_content_resolver`` — cada ``ProposalScheme`` tiene su propio
 alcance, plazo, condiciones económicas, forma de pago, servicios excluidos y
-propiedad intelectual.
+propiedad intelectual, y está vinculado a UN producto (modelo nuevo).
 
-Modo combinado (``combine_schemes=True``): un único Word con N bloques
-"ESQUEMA: …" donde cada uno trae sus secciones.
+Modo unificado (``combine_schemes=True``): un único Word con un bloque
+«PRODUCTO — ESQUEMA» por producto.
 
-Modo separado (``combine_schemes=False`` y >= 2 esquemas): un .docx por
-esquema, empaquetados en ZIP.
+Modo separado (``combine_schemes=False`` y >= 2 productos): un .docx por
+PRODUCTO, empaquetados en ZIP.
+
+Propuestas legadas (esquemas sin ``product_id``): conservan el comportamiento
+anterior — bloques y archivos por esquema.
 """
 import logging
+import re
+import unicodedata
 import uuid
 import zipfile
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -47,6 +52,14 @@ SCHEME_LABEL = {
     "services": "servicios",
     "support_maintenance": "soporte_mantenimiento",
 }
+
+
+def _slugify(name: str) -> str:
+    """Slug de nombre de producto para nombres de archivo (sin tildes ni símbolos)."""
+    normalized = unicodedata.normalize("NFKD", name)
+    ascii_name = normalized.encode("ascii", "ignore").decode("ascii")
+    slug = re.sub(r"[^a-z0-9]+", "-", ascii_name.lower()).strip("-")
+    return slug or "producto"
 
 
 def _cover_letter_fallback(
@@ -175,8 +188,14 @@ def _ensure_content_ready(
         return
 
     _generate_global_content_with_innti(proposal, db)
-    product_names = [p.product_name for p in proposal.products]
+    all_product_names = [p.product_name for p in proposal.products]
     for scheme in proposal.schemes:
+        if scheme.product_id is not None and scheme.product is not None:
+            # Modelo nuevo: el contenido del esquema se genera solo con SU producto
+            product_names = [scheme.product.product_name]
+        else:
+            # Legado: el esquema aplica a todos los productos de la propuesta
+            product_names = all_product_names
         _generate_scheme_content_with_innti(proposal, scheme, product_names, db)
 
 
@@ -236,7 +255,12 @@ def _build_separate_docx_files(
     db: Session,
     settings: Settings,
 ) -> list[Path]:
-    """Genera un .docx por esquema con su contenido específico (combine_schemes=False)."""
+    """Genera los documentos del modo separado (combine_schemes=False).
+
+    Modelo nuevo: un .docx POR PRODUCTO, con las secciones de su esquema y el
+    nombre de archivo con el slug del producto.
+    Propuestas legadas: un .docx por esquema (comportamiento anterior).
+    """
     proposal = db.query(Proposal).filter(Proposal.id == proposal_id).first()
     if not proposal:
         raise HTTPException(status_code=404, detail="Propuesta no encontrada")
@@ -249,9 +273,23 @@ def _build_separate_docx_files(
     generator = DocumentGenerator()
     paths: list[Path] = []
 
-    for scheme in proposal.schemes:
+    if proposal.uses_product_schemes:
+        # (esquema, productos del documento, sufijo del nombre de archivo)
+        units = [
+            (product.scheme,
+             [p for p in portfolio_products if p.name.lower() == product.product_name.lower()],
+             _slugify(product.product_name))
+            for product in proposal.products
+            if product.scheme is not None
+        ]
+    else:
+        units = []
+        for scheme in proposal.schemes:
+            scheme_str = scheme.scheme_type.value if hasattr(scheme.scheme_type, "value") else str(scheme.scheme_type)
+            units.append((scheme, portfolio_products, SCHEME_LABEL.get(scheme_str, scheme_str)))
+
+    for scheme, doc_products, file_suffix in units:
         scheme_str = scheme.scheme_type.value if hasattr(scheme.scheme_type, "value") else str(scheme.scheme_type)
-        label = SCHEME_LABEL.get(scheme_str, scheme_str)
         content = resolve_scheme_content(proposal, scheme)
 
         doc = generator.generate_proposal_docx(
@@ -261,7 +299,7 @@ def _build_separate_docx_files(
             client_entity=client.entity,
             client_city=client.city or "Bogotá",
             scheme_types=[scheme_str],
-            products=portfolio_products,
+            products=doc_products,
             context_text=content["context_text"],
             scope_text=content["scope_text"],
             letter_text=content["letter_text"],
@@ -273,11 +311,24 @@ def _build_separate_docx_files(
         )
 
         uid = uuid.uuid4().hex[:8]
-        output_path = output_dir / f"propuesta_{proposal_id}_{label}_{uid}.docx"
+        output_path = output_dir / f"propuesta_{proposal_id}_{file_suffix}_{uid}.docx"
         generator.save_document(doc, str(output_path))
         paths.append(output_path)
 
     return paths
+
+
+def _wants_separate_documents(proposal: Proposal) -> bool:
+    """True si la propuesta debe generar múltiples documentos (ZIP).
+
+    Modelo nuevo: separado por producto (requiere >= 2 productos).
+    Legado: separado por esquema (requiere >= 2 esquemas).
+    """
+    if proposal.combine_schemes:
+        return False
+    if proposal.uses_product_schemes:
+        return len(proposal.products) > 1
+    return len(proposal.schemes) > 1
 
 
 def _pack_zip(file_paths: list[Path], zip_path: Path) -> Path:
@@ -301,14 +352,14 @@ def generate_document(
 ):
     """Genera el documento Word de la propuesta.
 
-    Si la propuesta tiene combine_schemes=False y más de un esquema, devuelve un ZIP
-    con un .docx por esquema. En caso contrario devuelve un único .docx.
+    Con combine_schemes=False devuelve un ZIP con un .docx por producto
+    (por esquema en propuestas legadas). En caso contrario, un único .docx.
     """
     proposal = db.query(Proposal).filter(Proposal.id == proposal_id).first()
     if not proposal:
         raise HTTPException(status_code=404, detail="Propuesta no encontrada")
 
-    if not proposal.combine_schemes and len(proposal.schemes) > 1:
+    if _wants_separate_documents(proposal):
         paths = _build_separate_docx_files(proposal_id, use_innti, db, settings)
         zip_path = _get_output_dir() / f"propuesta_{proposal_id}_documentos_{uuid.uuid4().hex[:8]}.zip"
         _pack_zip(paths, zip_path)
@@ -335,7 +386,8 @@ def generate_pdf(
 ):
     """Genera la propuesta en formato PDF.
 
-    Si combine_schemes=False y más de un esquema, devuelve un ZIP con un PDF por esquema.
+    Con combine_schemes=False devuelve un ZIP con un PDF por producto
+    (por esquema en propuestas legadas).
     """
     proposal = db.query(Proposal).filter(Proposal.id == proposal_id).first()
     if not proposal:
@@ -343,7 +395,7 @@ def generate_pdf(
 
     generator = DocumentGenerator()
 
-    if not proposal.combine_schemes and len(proposal.schemes) > 1:
+    if _wants_separate_documents(proposal):
         docx_paths = _build_separate_docx_files(proposal_id, use_innti, db, settings)
         pdf_paths: list[Path] = []
         for docx_path in docx_paths:

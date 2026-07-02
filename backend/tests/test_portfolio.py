@@ -5,6 +5,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 from app.services.portfolio_service import (
     PortfolioService, PortfolioProduct, PortfolioNotFoundError, MVP_SCHEME_STRINGS,
+    QLOUDSI_FORBIDDEN_SCHEMES, is_qloudsi_product,
 )
 
 
@@ -121,11 +122,11 @@ class TestPortfolioService:
         assert len(products) == 1
 
 
-def _make_product(name: str, allowed_schemes=None) -> PortfolioProduct:
+def _make_product(name: str, allowed_schemes=None, product_type: str = "Plataforma") -> PortfolioProduct:
     """Helper para crear un PortfolioProduct de prueba."""
     return PortfolioProduct(
         name=name,
-        product_type="Plataforma",
+        product_type=product_type,
         description="",
         business_framework="",
         revenue_info="",
@@ -137,85 +138,83 @@ def _make_product(name: str, allowed_schemes=None) -> PortfolioProduct:
     )
 
 
-class TestAllowedSchemes:
-    """Tests para la lógica de allowed_schemes en PortfolioService."""
+class TestIsQloudsiProduct:
+    """Tests de la regla de detección de servicios QloudSI."""
 
-    def test_product_default_empty_allowed_schemes(self):
-        """Un producto sin restricciones tiene allowed_schemes vacío."""
-        p = _make_product("ProdA")
-        assert p.allowed_schemes == []
+    def test_servicio_qloudsi(self):
+        assert is_qloudsi_product("Servicio QloudSI") is True
 
-    def test_get_allowed_schemes_no_products(self):
-        """Sin productos retorna lista vacía."""
+    def test_case_insensitive(self):
+        assert is_qloudsi_product("servicio qloudsi") is True
+        assert is_qloudsi_product("SERVICIO QLOUDSI") is True
+
+    def test_plataforma_is_not_qloudsi(self):
+        assert is_qloudsi_product("Plataforma") is False
+
+    def test_empty_string(self):
+        assert is_qloudsi_product("") is False
+
+    def test_none(self):
+        assert is_qloudsi_product(None) is False
+
+
+class TestAllowedSchemesPerProduct:
+    """Tests para la resolución de esquemas permitidos POR PRODUCTO."""
+
+    def test_product_no_restriction_returns_all_mvp(self):
+        """Producto sin columna 9 → todos los MVP schemes."""
         service = PortfolioService("dummy.xlsx")
-        service._products = []
-        assert service.get_allowed_schemes_for_products([]) == []
+        result = service.get_allowed_schemes_for_product(_make_product("ProdA"))
+        assert result == list(MVP_SCHEME_STRINGS)
 
-    def test_get_allowed_schemes_product_not_found_returns_all_mvp(self):
-        """Si un producto no está en el portafolio, permite todos los MVP schemes."""
+    def test_product_with_column9_restriction(self):
+        """Producto con columna 9 → solo sus esquemas, en orden MVP."""
         service = PortfolioService("dummy.xlsx")
-        service._products = [_make_product("Otro")]
-        result = service.get_allowed_schemes_for_products(["Producto Inexistente"])
-        assert set(result) == set(MVP_SCHEME_STRINGS)
+        product = _make_product("ProdA", allowed_schemes=["support_maintenance", "licensing"])
+        result = service.get_allowed_schemes_for_product(product)
+        assert result == ["licensing", "support_maintenance"]
 
-    def test_get_allowed_schemes_product_no_restriction_returns_all_mvp(self):
-        """Un producto con allowed_schemes vacío permite todos los MVP schemes."""
+    def test_qloudsi_without_column9_never_includes_licensing(self):
+        """QloudSI sin restricción de Excel → todos los MVP menos licensing."""
         service = PortfolioService("dummy.xlsx")
-        service._products = [_make_product("ProdA", allowed_schemes=[])]
-        result = service.get_allowed_schemes_for_products(["ProdA"])
-        assert set(result) == set(MVP_SCHEME_STRINGS)
+        product = _make_product("Innti", product_type="Servicio QloudSI")
+        result = service.get_allowed_schemes_for_product(product)
+        assert "licensing" not in result
+        assert result == ["services", "support_maintenance"]
 
-    def test_get_allowed_schemes_single_product_restricted(self):
-        """Un producto con restricciones retorna solo sus esquemas permitidos."""
+    def test_qloudsi_with_column9_licensing_still_excluded(self):
+        """Aunque el Excel liste licensing, un QloudSI NUNCA lo ofrece (regla dura)."""
         service = PortfolioService("dummy.xlsx")
-        service._products = [_make_product("ProdA", allowed_schemes=["licensing"])]
-        result = service.get_allowed_schemes_for_products(["ProdA"])
-        assert result == ["licensing"]
-
-    def test_get_allowed_schemes_intersection_of_two_products(self):
-        """La intersección de dos productos sin esquemas en común retorna vacío."""
-        service = PortfolioService("dummy.xlsx")
-        service._products = [
-            _make_product("ProdA", allowed_schemes=["licensing"]),
-            _make_product("ProdB", allowed_schemes=["services"]),
-        ]
-        result = service.get_allowed_schemes_for_products(["ProdA", "ProdB"])
-        assert result == []
-
-    def test_get_allowed_schemes_intersection_keeps_common_schemes(self):
-        """La intersección retorna solo los esquemas comunes a todos los productos."""
-        service = PortfolioService("dummy.xlsx")
-        service._products = [
-            _make_product("ProdA", allowed_schemes=["licensing", "services"]),
-            _make_product("ProdB", allowed_schemes=["services", "support_maintenance"]),
-        ]
-        result = service.get_allowed_schemes_for_products(["ProdA", "ProdB"])
+        product = _make_product(
+            "Innti", allowed_schemes=["licensing", "services"],
+            product_type="Servicio QloudSI",
+        )
+        result = service.get_allowed_schemes_for_product(product)
         assert result == ["services"]
 
-    def test_get_allowed_schemes_unrestricted_product_does_not_narrow_set(self):
-        """Un producto sin restricción contribuye todos los MVP schemes: no estrecha la intersección."""
-        service = PortfolioService("dummy.xlsx")
-        service._products = [
-            _make_product("ProdA", allowed_schemes=["licensing"]),
-            _make_product("ProdB", allowed_schemes=[]),  # sin restricción
-        ]
-        result = service.get_allowed_schemes_for_products(["ProdA", "ProdB"])
-        # ProdB aporta todos los MVP → intersección con ProdA = ["licensing"]
-        assert result == ["licensing"]
+    def test_forbidden_schemes_constant(self):
+        """La regla dura solo prohíbe licensing (documentado como constante)."""
+        assert QLOUDSI_FORBIDDEN_SCHEMES == {"licensing"}
 
-    def test_get_allowed_schemes_case_insensitive_lookup(self):
+    def test_by_name_found(self):
+        """Resolución por nombre: usa la restricción del producto encontrado."""
+        service = PortfolioService("dummy.xlsx")
+        service._products = [_make_product("ProdA", allowed_schemes=["licensing"])]
+        assert service.get_allowed_schemes_for_product_name("ProdA") == ["licensing"]
+
+    def test_by_name_case_insensitive(self):
         """La búsqueda por nombre de producto es case-insensitive."""
         service = PortfolioService("dummy.xlsx")
         service._products = [_make_product("Qx-Tránsito", allowed_schemes=["licensing"])]
-        result = service.get_allowed_schemes_for_products(["QX-TRÁNSITO"])
-        assert result == ["licensing"]
+        assert service.get_allowed_schemes_for_product_name("QX-TRÁNSITO") == ["licensing"]
 
-    def test_get_allowed_schemes_preserves_mvp_order(self):
-        """El resultado sigue el orden de MVP_SCHEME_STRINGS."""
+    def test_by_name_not_found_returns_all_mvp(self):
+        """Producto que no está en el portafolio → sin restricción (todos los MVP)."""
         service = PortfolioService("dummy.xlsx")
-        service._products = [
-            _make_product("ProdA", allowed_schemes=["support_maintenance", "licensing"]),
-        ]
-        result = service.get_allowed_schemes_for_products(["ProdA"])
-        # licensing antes que support_maintenance (orden MVP)
-        assert result.index("licensing") < result.index("support_maintenance")
+        service._products = [_make_product("Otro")]
+        result = service.get_allowed_schemes_for_product_name("Producto Inexistente")
+        assert result == list(MVP_SCHEME_STRINGS)
+
+    def test_intersection_method_removed(self):
+        """El método de intersección (modelo viejo) ya no existe."""
+        assert not hasattr(PortfolioService, "get_allowed_schemes_for_products")

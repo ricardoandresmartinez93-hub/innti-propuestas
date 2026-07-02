@@ -2,27 +2,10 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { portfolioApi, proposalApi, clientApi } from '../services/api'
 import { SCHEME_LABELS } from '../types'
-import type { PortfolioProduct, ProposalScheme, Client, ProposalCreate } from '../types'
+import type { PortfolioProduct, Client, ProposalCreate, SchemeType } from '../types'
 import SchemeSelector from '../components/SchemeSelector'
+import type { SchemeAssignments } from '../components/SchemeSelector'
 import ClientForm from '../components/ClientForm'
-
-const MVP_SCHEME_TYPES = ['licensing', 'services', 'support_maintenance']
-
-/** Returns the intersection of allowed schemes across all selected products.
- *  A product with no restrictions contributes all MVP schemes (does not restrict).
- *  Returns an empty array when the selected products have no schemes in common. */
-function computeAllowedSchemes(products: PortfolioProduct[]): string[] {
-  if (products.length === 0) return MVP_SCHEME_TYPES
-  let intersection = new Set<string>(MVP_SCHEME_TYPES)
-  for (const p of products) {
-    const productSchemes = new Set<string>(
-      p.allowed_schemes && p.allowed_schemes.length > 0 ? p.allowed_schemes : MVP_SCHEME_TYPES
-    )
-    intersection = new Set([...intersection].filter(s => productSchemes.has(s)))
-    if (intersection.size === 0) break
-  }
-  return MVP_SCHEME_TYPES.filter(s => intersection.has(s))
-}
 
 export default function NewProposalPage() {
   const navigate = useNavigate()
@@ -34,8 +17,10 @@ export default function NewProposalPage() {
   const [products, setProducts] = useState<PortfolioProduct[]>([])
   const [selectedProducts, setSelectedProducts] = useState<PortfolioProduct[]>([])
   const [searchQuery, setSearchQuery] = useState('')
-  
-  const [selectedSchemes, setSelectedSchemes] = useState<Omit<ProposalScheme, 'id'>[]>([])
+
+  // Un esquema por producto (clave: nombre del producto)
+  const [schemeAssignments, setSchemeAssignments] = useState<SchemeAssignments>({})
+  const [schemesComplete, setSchemesComplete] = useState(false)
   const [combineSchemes, setCombineSchemes] = useState(true)
   
   const [client, setClient] = useState<Client | null>(null)
@@ -72,12 +57,6 @@ export default function NewProposalPage() {
     })
   }
 
-  // When selected products change, drop any scheme that is no longer valid.
-  useEffect(() => {
-    const allowed = computeAllowedSchemes(selectedProducts)
-    setSelectedSchemes(prev => prev.filter(s => allowed.includes(s.scheme_type)))
-  }, [selectedProducts])
-
   const currentDateSuffix = (() => {
     const d = new Date()
     const mm = String(d.getMonth() + 1).padStart(2, '0')
@@ -86,7 +65,7 @@ export default function NewProposalPage() {
   })()
 
   const handleCreateProposal = async () => {
-    if (!client || !proposalTitle || !proposalCode || selectedProducts.length === 0 || selectedSchemes.length === 0) return
+    if (!client || !proposalTitle || !proposalCode || selectedProducts.length === 0 || !schemesComplete) return
 
     setIsSubmitting(true)
     try {
@@ -94,15 +73,16 @@ export default function NewProposalPage() {
         title: proposalTitle,
         code: proposalCode.trim(),
         client_id: client.id,
-        combine_schemes: combineSchemes,
+        // Con un solo producto siempre se genera un único documento
+        combine_schemes: selectedProducts.length < 2 ? true : combineSchemes,
         products: selectedProducts.map(p => ({
           product_name: p.name,
           product_type: p.product_type,
-          description: p.description
+          description: p.description,
+          scheme: schemeAssignments[p.name],
         })),
-        schemes: selectedSchemes
       }
-      
+
       const res = await proposalApi.create(proposalData)
       navigate(`/proposals/${res.data.id}`)
     } catch (error) {
@@ -132,7 +112,8 @@ export default function NewProposalPage() {
   const canAdvance = () => {
     switch (currentStep) {
       case 1: return selectedProducts.length > 0
-      case 2: return selectedSchemes.length > 0
+      // Todos los productos deben tener su esquema asignado para avanzar
+      case 2: return schemesComplete
       case 3: return client !== null
       case 4: return proposalTitle.trim().length > 0 && proposalCode.trim().length > 0
       default: return false
@@ -237,12 +218,13 @@ export default function NewProposalPage() {
               Configurar Esquemas Comerciales
             </h3>
             <SchemeSelector
-              initialSchemes={selectedSchemes}
+              products={selectedProducts}
+              initialAssignments={schemeAssignments}
               initialCombine={combineSchemes}
-              allowedSchemes={computeAllowedSchemes(selectedProducts)}
-              onSchemesChanged={(schemes, combine) => {
-                setSelectedSchemes(schemes)
+              onSelectionChanged={(assignments, combine, isComplete) => {
+                setSchemeAssignments(assignments)
                 setCombineSchemes(combine)
+                setSchemesComplete(isComplete)
               }}
             />
           </div>
@@ -397,32 +379,29 @@ export default function NewProposalPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
-                <div className="border rounded-lg p-4 bg-gray-50">
-                  <h4 className="text-xs font-bold text-gray-500 uppercase mb-3">Productos</h4>
-                  <ul className="text-sm space-y-1">
-                    {selectedProducts.map(p => (
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <h4 className="text-xs font-bold text-gray-500 uppercase mb-3">Productos y esquemas</h4>
+                <ul className="text-sm space-y-1">
+                  {selectedProducts.map(p => {
+                    const scheme = schemeAssignments[p.name]
+                    return (
                       <li key={p.name} className="flex items-center">
                         <span className="w-1.5 h-1.5 bg-quipux-blue rounded-full mr-2" />
                         {p.name}
+                        {scheme && (
+                          <span className="ml-2 text-gray-600">
+                            — {SCHEME_LABELS[scheme.scheme_type as SchemeType]} ({scheme.payment_frequency})
+                          </span>
+                        )}
                       </li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="border rounded-lg p-4 bg-gray-50">
-                  <h4 className="text-xs font-bold text-gray-500 uppercase mb-3">Esquemas</h4>
-                  <ul className="text-sm space-y-1">
-                    {selectedSchemes.map(s => (
-                      <li key={s.scheme_type} className="flex items-center">
-                        <span className="w-1.5 h-1.5 bg-quipux-blue rounded-full mr-2" />
-                        {SCHEME_LABELS[s.scheme_type]} ({s.payment_frequency})
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="mt-2 text-[10px] text-gray-400">
-                    Generación: {combineSchemes ? 'Documento único' : 'Documentos separados'}
-                  </p>
-                </div>
+                    )
+                  })}
+                </ul>
+                <p className="mt-2 text-[10px] text-gray-400">
+                  Generación: {selectedProducts.length < 2 || combineSchemes
+                    ? 'Documento unificado'
+                    : 'Documentos separados (uno por producto)'}
+                </p>
               </div>
 
               {client && (

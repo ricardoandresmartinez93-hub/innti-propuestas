@@ -74,16 +74,10 @@ export interface ClientCreate {
 }
 
 // --- Propuesta ---
-export interface ProposalProduct {
-  id?: number
-  product_name: string
-  product_type?: string
-  description?: string
-  category?: string
-}
-
 export interface ProposalScheme {
   id?: number
+  /** Product this scheme belongs to (null on legacy proposals). */
+  product_id?: number | null
   scheme_type: SchemeType
   payment_frequency?: string
   // Contenido por esquema (alcance, plazo, condiciones económicas, forma de pago,
@@ -95,6 +89,16 @@ export interface ProposalScheme {
   payment_terms?: string
   excluded_services?: string
   ip_section?: string
+}
+
+export interface ProposalProduct {
+  id?: number
+  product_name: string
+  product_type?: string
+  description?: string
+  category?: string
+  /** Scheme assigned to this product (one scheme per product). */
+  scheme?: ProposalScheme
 }
 
 /** Subconjunto editable de ProposalScheme (lo que acepta el PATCH del esquema). */
@@ -119,13 +123,21 @@ export interface Proposal {
   updated_at: string
 }
 
+/** Product payload for proposal creation — each product carries its own scheme. */
+export interface ProposalProductCreate {
+  product_name: string
+  product_type?: string
+  description?: string
+  category?: string
+  scheme: Omit<ProposalScheme, 'id' | 'product_id'>
+}
+
 export interface ProposalCreate {
   title: string
   code?: string
   client_id: number
   combine_schemes: boolean
-  products: Omit<ProposalProduct, 'id'>[]
-  schemes: Omit<ProposalScheme, 'id'>[]
+  products: ProposalProductCreate[]
 }
 
 // --- Aprobaciones ---

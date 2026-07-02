@@ -27,19 +27,27 @@ vi.mock('../services/api', () => ({
 }))
 
 // ─── Mock SchemeSelector ──────────────────────────────────────────────────────
-// Botón que simula seleccionar un esquema (evita depender del componente real).
+// Botón que simula asignar un esquema a cada producto (evita depender del
+// componente real). Expone los productos recibidos para poder verificarlos.
 vi.mock('../components/SchemeSelector', () => ({
-  default: ({ onSchemesChanged, allowedSchemes }: {
-    onSchemesChanged: (schemes: { scheme_type: string; payment_frequency: string }[], combine: boolean) => void
-    allowedSchemes?: string[]
+  default: ({ products, onSelectionChanged }: {
+    products: { name: string }[]
+    onSelectionChanged: (
+      assignments: Record<string, { scheme_type: string; payment_frequency: string }>,
+      combine: boolean,
+      isComplete: boolean,
+    ) => void
   }) => (
     <div>
-      {allowedSchemes && (
-        <span data-testid="allowed-schemes">{allowedSchemes.join(',')}</span>
-      )}
+      <span data-testid="selector-products">{products.map(p => p.name).join(',')}</span>
       <button
         data-testid="mock-scheme-btn"
-        onClick={() => onSchemesChanged([{ scheme_type: 'licensing', payment_frequency: 'único' }], true)}
+        onClick={() => {
+          const assignments = Object.fromEntries(
+            products.map(p => [p.name, { scheme_type: 'licensing', payment_frequency: 'Único' }])
+          )
+          onSelectionChanged(assignments, true, products.length > 0)
+        }}
       >
         Seleccionar Esquema Mock
       </button>
@@ -406,8 +414,8 @@ describe('NewProposalPage — Paso 4: código y título', () => {
   })
 })
 
-// ── allowedSchemes — filtrado por producto seleccionado ───────────────────────
-describe('NewProposalPage — allowedSchemes', () => {
+// ── Esquema por producto — el selector recibe los productos seleccionados ─────
+describe('NewProposalPage — esquema por producto', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(portfolioApi.listProducts).mockResolvedValue({ data: mockProducts } as any)
@@ -421,56 +429,73 @@ describe('NewProposalPage — allowedSchemes', () => {
       </MemoryRouter>
     )
 
-  it('pasa allowedSchemes al SchemeSelector con los esquemas del producto seleccionado', async () => {
-    const restrictedProduct: PortfolioProduct = {
-      name: 'ProdRestringido',
-      product_type: 'software',
-      description: '',
-      business_framework: '',
-      monetization_model: '',
-      pricing_model: '',
-      country: 'Colombia',
-      allowed_schemes: ['licensing'],
-    }
-    vi.mocked(portfolioApi.listProducts).mockResolvedValue({ data: [restrictedProduct] } as any)
-
+  it('pasa los productos seleccionados al SchemeSelector', async () => {
     renderPage()
+    await waitFor(() => expect(screen.getByText('Producto Alpha')).toBeInTheDocument())
 
-    // Esperar a que aparezca el nombre del producto (indica que la carga terminó)
-    await waitFor(() => expect(screen.getByText('ProdRestringido')).toBeInTheDocument())
-
-    // Seleccionar el producto usando el único checkbox disponible
     fireEvent.click(screen.getAllByRole('checkbox')[0])
+    await waitFor(() => expect(getEnabledNextBtn()).toBeTruthy())
+    fireEvent.click(getEnabledNextBtn()!)
 
-    // Avanzar al paso 2 (el botón se habilita al seleccionar al menos 1 producto)
-    await waitFor(() => expect(screen.getByText('Siguiente')).not.toBeDisabled())
-    fireEvent.click(screen.getByText('Siguiente'))
-
-    // Verificar que el allowed-schemes que recibe SchemeSelector sea el del producto
     await waitFor(() => {
-      const allowedEl = screen.queryByTestId('allowed-schemes')
-      if (allowedEl) {
-        expect(allowedEl.textContent).toContain('licensing')
-        expect(allowedEl.textContent).not.toContain('services')
-      }
+      expect(screen.getByTestId('selector-products').textContent).toBe('Producto Alpha')
     })
   })
 
-  it('pasa todos los MVP schemes cuando el producto no tiene restricciones', async () => {
+  it('no permite avanzar del paso 2 sin asignar esquema a todos los productos', async () => {
     renderPage()
-    await waitFor(() => expect(screen.queryByText('Cargando portafolio...')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Producto Alpha')).toBeInTheDocument())
 
-    // El producto mock tiene todos los MVP schemes
     fireEvent.click(screen.getAllByRole('checkbox')[0])
-    fireEvent.click(screen.getByText('Siguiente'))
+    await waitFor(() => expect(getEnabledNextBtn()).toBeTruthy())
+    fireEvent.click(getEnabledNextBtn()!)
+
+    // En el paso 2, sin asignaciones, "Siguiente" queda deshabilitado
+    await waitFor(() => expect(screen.getByTestId('mock-scheme-btn')).toBeInTheDocument())
+    expect(getEnabledNextBtn()).toBeUndefined()
+
+    // Al asignar esquemas (mock) se habilita
+    fireEvent.click(screen.getByTestId('mock-scheme-btn'))
+    await waitFor(() => expect(getEnabledNextBtn()).toBeTruthy())
+  })
+
+  it('el payload de creación embebe el esquema dentro de cada producto', async () => {
+    const { proposalApi } = await import('../services/api')
+    vi.mocked(proposalApi.create).mockResolvedValue({ data: { id: 7 } } as any)
+
+    renderPage()
+    await navigateToStep4()
+
+    fireEvent.change(
+      screen.getByPlaceholderText(/Ej: 3018-/i),
+      { target: { value: '3018-0726' } }
+    )
+    fireEvent.change(
+      screen.getByPlaceholderText(/Propuesta Modernización/i),
+      { target: { value: 'Propuesta Esquema por Producto' } }
+    )
+
+    await waitFor(() => expect(screen.getByText('Crear Propuesta')).not.toBeDisabled())
+    fireEvent.click(screen.getByText('Crear Propuesta'))
 
     await waitFor(() => {
-      const allowedEl = screen.queryByTestId('allowed-schemes')
-      if (allowedEl) {
-        expect(allowedEl.textContent).toContain('licensing')
-        expect(allowedEl.textContent).toContain('services')
-        expect(allowedEl.textContent).toContain('support_maintenance')
-      }
+      expect(proposalApi.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          combine_schemes: true,
+          products: [
+            expect.objectContaining({
+              product_name: 'Producto Alpha',
+              scheme: expect.objectContaining({
+                scheme_type: 'licensing',
+                payment_frequency: 'Único',
+              }),
+            }),
+          ],
+        })
+      )
+      // El contrato viejo (schemes top-level) ya no se envía
+      const payload = vi.mocked(proposalApi.create).mock.calls.at(-1)![0] as unknown as Record<string, unknown>
+      expect(payload).not.toHaveProperty('schemes')
     })
   })
 })

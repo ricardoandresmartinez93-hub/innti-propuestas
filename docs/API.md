@@ -155,7 +155,9 @@ Gestión del ciclo de vida de las propuestas comerciales.
 
 - **Método**: `POST`
 - **Ruta**: `/api/proposals/`
-- **Descripción**: Crea una nueva propuesta en estado `draft`.
+- **Descripción**: Crea una nueva propuesta en estado `draft`. Cada producto
+  lleva **su propio esquema** embebido en el campo `scheme` (un esquema por
+  producto). La lista `schemes` a nivel propuesta es contrato viejo y se rechaza.
 - **Request Body**:
   ```json
   {
@@ -168,24 +170,35 @@ Gestión del ciclo de vida de las propuestas comerciales.
         "product_name": "Qx-Tránsito",
         "product_type": "Plataforma",
         "description": "Plataforma misional de tránsito",
-        "category": "modernización"
+        "category": "modernización",
+        "scheme": { "scheme_type": "licensing", "payment_frequency": "unico" }
+      },
+      {
+        "product_name": "Innti",
+        "product_type": "Servicio QloudSI",
+        "description": "IA corporativa",
+        "scheme": { "scheme_type": "services", "payment_frequency": "mensual" }
       }
-    ],
-    "schemes": [
-      { "scheme_type": "licensing", "payment_frequency": "unico" }
     ]
   }
   ```
-  > Nota: `products` y `schemes` son **listas de objetos**, no de cadenas.
-  > Cada producto sigue el esquema `ProposalProductCreate` y cada esquema el
-  > `ProposalSchemeCreate`.
+  > Nota: `combine_schemes=true` genera 1 documento unificado con un bloque por
+  > producto; `false` genera un documento por producto (requiere ≥2 productos).
 - **Ejemplo Curl**:
   ```bash
   curl -X POST "http://localhost:8000/api/proposals/" \
        -H "Content-Type: application/json" \
-       -d '{"title": "Propuesta DEI", "client_id": 1, "products": [], "schemes": []}'
+       -d '{"title": "Propuesta DEI", "client_id": 1, "products": [{"product_name": "DEI", "product_type": "Plataforma", "scheme": {"scheme_type": "licensing", "payment_frequency": "unico"}}]}'
   ```
-- **Errores**: `404` si `client_id` no corresponde a un cliente existente.
+- **Errores**:
+  - `404` si `client_id` no corresponde a un cliente existente.
+  - `422` si un producto es servicio QloudSI y su esquema es `licensing`
+    (regla dura de negocio).
+  - `422` si el esquema de un producto no está en su lista permitida
+    (columna "Esquemas Permitidos" del Excel) o no es un esquema MVP.
+  - `422` si `combine_schemes=false` con menos de 2 productos, si un producto
+    no trae `scheme`, o si el payload usa la lista `schemes` a nivel propuesta
+    (contrato viejo).
 
 ### Listar Propuestas
 

@@ -11,6 +11,7 @@ from fastapi import status
 
 from app.main import app
 from app.routers.portfolio import get_portfolio_service
+from app.services.portfolio_service import PortfolioService
 
 
 # ── Fixture: override del servicio de portafolio ──────────────────────────────
@@ -20,8 +21,14 @@ def portfolio_mock(client):
     Inyecta un MagicMock como PortfolioService en la app FastAPI.
     Depende de 'client' para garantizar que el override de DB ya esté activo.
     El fixture 'client' limpia todos los overrides al finalizar.
+
+    get_allowed_schemes_for_product usa la implementación REAL para que los
+    tests del router validen la resolución por producto (incl. regla QloudSI).
     """
     mock_svc = MagicMock()
+    mock_svc.get_allowed_schemes_for_product.side_effect = (
+        lambda p: PortfolioService.get_allowed_schemes_for_product(mock_svc, p)
+    )
     app.dependency_overrides[get_portfolio_service] = lambda: mock_svc
     yield mock_svc
 
@@ -116,7 +123,7 @@ def test_list_product_types(client, portfolio_mock):
 
 
 def test_product_response_includes_allowed_schemes(client, portfolio_mock):
-    """La respuesta de productos incluye el campo allowed_schemes."""
+    """La respuesta de productos incluye allowed_schemes con la restricción de columna 9."""
     portfolio_mock.get_products.return_value = [
         _make_product("ProdA", allowed_schemes=["licensing", "services"]),
     ]
@@ -129,8 +136,8 @@ def test_product_response_includes_allowed_schemes(client, portfolio_mock):
     assert set(data[0]["allowed_schemes"]) == {"licensing", "services"}
 
 
-def test_product_response_empty_allowed_schemes(client, portfolio_mock):
-    """Un producto sin restricciones devuelve allowed_schemes vacío."""
+def test_product_response_no_restriction_resolves_all_mvp(client, portfolio_mock):
+    """Un producto sin restricciones devuelve la lista RESUELTA: todos los MVP schemes."""
     portfolio_mock.get_products.return_value = [
         _make_product("ProdB", allowed_schemes=[]),
     ]
@@ -139,4 +146,20 @@ def test_product_response_empty_allowed_schemes(client, portfolio_mock):
 
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert data[0]["allowed_schemes"] == []
+    assert data[0]["allowed_schemes"] == ["licensing", "services", "support_maintenance"]
+
+
+def test_qloudsi_product_never_offers_licensing(client, portfolio_mock):
+    """Un servicio QloudSI nunca incluye licensing en allowed_schemes, aunque el Excel lo liste."""
+    portfolio_mock.get_products.return_value = [
+        _make_product(
+            "Innti", product_type="Servicio QloudSI",
+            allowed_schemes=["licensing", "services"],
+        ),
+    ]
+
+    response = client.get("/api/portfolio/products")
+
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data[0]["allowed_schemes"] == ["services"]

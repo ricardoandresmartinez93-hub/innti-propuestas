@@ -1173,7 +1173,7 @@ class DocumentGenerator:
         ip_section = scheme_payload.get("ip_section_text")
 
         if scheme_heading:
-            doc.add_heading(f"{section_num}. ESQUEMA: {scheme_heading}", level=1)
+            doc.add_heading(f"{section_num}. {scheme_heading}", level=1)
             sub = lambda i: f"{section_num}.{i}"
             heading_level = 2
         else:
@@ -1263,16 +1263,18 @@ class DocumentGenerator:
         letter_text: str,
         schemes_payload: List[dict],
     ) -> Document:
-        """Genera un único Word combinando N esquemas en bloques separados.
+        """Genera un único Word combinando N bloques de esquema.
+
+        Modelo nuevo (payload con "product_name"): un bloque por producto —
+            2. QX-TRÁNSITO — LICENCIAMIENTO
+            3. SERVICIO CLOUD — PRESTACIÓN DE SERVICIOS
+        Propuestas legadas (sin "product_name"): un bloque por esquema —
+            2. ESQUEMA: LICENCIAMIENTO
 
         Estructura:
             Portada + Índice + Carta (una vez)
             1. CONTEXTO (global)
-            2. ESQUEMA: LICENCIAMIENTO
-               2.1 Alcance, 2.2 Plazo, 2.3 Condiciones económicas, 2.4 Exclusiones, 2.5 IP
-            3. ESQUEMA: PRESTACIÓN DE SERVICIOS
-               3.1 ...
-            ...
+            2..N-1. Bloques (alcance, plazo, condiciones, exclusiones, IP)
             N. ASPECTOS LEGALES (confidencialidad, prevención, ética)
         """
         doc = Document()
@@ -1318,8 +1320,20 @@ class DocumentGenerator:
 
         for payload in schemes_payload:
             scheme_type = payload.get("scheme_type", "licensing")
-            heading = self.SCHEME_HEADING.get(scheme_type, scheme_type.upper())
-            self._render_scheme_block(doc, section_num, payload, products, scheme_heading=heading)
+            scheme_label = self.SCHEME_HEADING.get(scheme_type, scheme_type.upper())
+            product_name = payload.get("product_name")
+            if product_name:
+                # Modelo nuevo: bloque por producto — titula «PRODUCTO — ESQUEMA»
+                # y lista únicamente el producto dueño del bloque.
+                heading = f"{product_name.upper()} — {scheme_label}"
+                block_products = [
+                    p for p in products if p.name.lower() == product_name.lower()
+                ]
+            else:
+                # Propuestas legadas: bloque por esquema con todos los productos.
+                heading = f"ESQUEMA: {scheme_label}"
+                block_products = products
+            self._render_scheme_block(doc, section_num, payload, block_products, scheme_heading=heading)
             section_num += 1
 
         self._render_legal_footer(doc, section_num, client_entity)

@@ -53,7 +53,7 @@ def client(db_session: Session):
     # using their own fixture (see test_portfolio_api.py's `portfolio_mock`).
     _permissive_portfolio = MagicMock()
     _permissive_portfolio.get_products.return_value = []
-    _permissive_portfolio.get_allowed_schemes_for_products.return_value = [
+    _permissive_portfolio.get_allowed_schemes_for_product_name.return_value = [
         "licensing", "services", "support_maintenance"
     ]
 
@@ -144,7 +144,7 @@ def sample_client_data():
 
 @pytest.fixture
 def sample_proposal_data():
-    """Datos de ejemplo para una propuesta."""
+    """Datos de ejemplo para una propuesta (cada producto con su esquema)."""
     return {
         "title": "Licenciamiento y Modernización de soluciones",
         "code": "3018-0226",
@@ -155,15 +155,14 @@ def sample_proposal_data():
                 "product_type": "Plataforma",
                 "description": "Plataforma de servicios digitales",
                 "category": "nuevo",
+                "scheme": {"scheme_type": "licensing", "payment_frequency": "unico"},
             },
             {
                 "product_name": "Qx-Tránsito",
                 "product_type": "Plataforma",
                 "description": "Plataforma misional de tránsito",
                 "category": "modernización",
+                "scheme": {"scheme_type": "services", "payment_frequency": "mensual"},
             },
-        ],
-        "schemes": [
-            {"scheme_type": "licensing", "payment_frequency": "unico"},
         ],
     }

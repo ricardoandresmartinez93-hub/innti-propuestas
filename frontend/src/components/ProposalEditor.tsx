@@ -382,6 +382,18 @@ const ProposalEditor = forwardRef<ProposalEditorHandle, ProposalEditorProps>(
       [activeTab]
     )
 
+    /** Rótulo del esquema: «Producto — Esquema» cuando está vinculado a un
+     *  producto (modelo nuevo); solo el esquema en propuestas legadas. */
+    const schemeLabel = (scheme?: ProposalScheme): string => {
+      if (!scheme) return ''
+      const base = SCHEME_LABELS[scheme.scheme_type as SchemeType] || scheme.scheme_type
+      if (scheme.product_id != null) {
+        const product = proposal.products.find((p) => p.id === scheme.product_id)
+        if (product) return `${product.product_name} — ${base}`
+      }
+      return base
+    }
+
     // Refs para que el callback onUpdate de TipTap (registrado una sola vez)
     // siempre escriba en la pestaña/esquema activos actuales.
     const activeTabRef = useRef(activeTab)
@@ -565,7 +577,7 @@ const ProposalEditor = forwardRef<ProposalEditorHandle, ProposalEditorProps>(
                       : 'bg-white text-blue-700 border border-blue-200 hover:bg-blue-100'
                   }`}
                 >
-                  {SCHEME_LABELS[s.scheme_type as SchemeType] || s.scheme_type}
+                  {schemeLabel(s)}
                 </button>
               ))}
             </div>
@@ -579,11 +591,9 @@ const ProposalEditor = forwardRef<ProposalEditorHandle, ProposalEditorProps>(
           )}
           {activeSection.scope === 'scheme' && proposal.schemes.length > 1 && (
             <div className="bg-indigo-50 border-b border-indigo-100 px-4 py-2 text-xs text-indigo-800">
-              Estás editando el contenido del esquema{' '}
+              Estás editando el contenido de{' '}
               <strong>
-                {SCHEME_LABELS[
-                  proposal.schemes.find((s) => s.id === activeSchemeId)?.scheme_type as SchemeType
-                ] || ''}
+                {schemeLabel(proposal.schemes.find((s) => s.id === activeSchemeId))}
               </strong>
               . Cambia el esquema arriba para editar los demás documentos.
             </div>

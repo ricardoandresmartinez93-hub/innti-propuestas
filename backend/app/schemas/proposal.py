@@ -9,29 +9,9 @@ from app.models.proposal import ProposalStatus, SchemeType
 from app.models.approval import ApprovalAction, ApprovalRole
 
 
-# --- Productos en Propuesta ---
-class ProposalProductCreate(BaseModel):
-    """Schema para agregar un producto a la propuesta."""
-    product_name: str
-    product_type: Optional[str] = None
-    description: Optional[str] = None
-    category: Optional[str] = None
-
-
-class ProposalProductRead(BaseModel):
-    """Schema para leer un producto de propuesta."""
-    id: int
-    product_name: str
-    product_type: Optional[str] = None
-    description: Optional[str] = None
-    category: Optional[str] = None
-
-    model_config = ConfigDict(from_attributes=True)
-
-
 # --- Esquemas en Propuesta ---
 class ProposalSchemeCreate(BaseModel):
-    """Schema para seleccionar un esquema (al crear la propuesta).
+    """Schema del esquema asignado a un producto (al crear la propuesta).
 
     El contenido editable (scope, validity, etc.) es opcional al crear;
     si no se provee, queda vacío y se rellena posteriormente con el editor
@@ -61,6 +41,7 @@ class ProposalSchemeUpdate(BaseModel):
 class ProposalSchemeRead(BaseModel):
     """Schema para leer un esquema."""
     id: int
+    product_id: Optional[int] = None
     scheme_type: SchemeType
     payment_frequency: Optional[str] = None
     scope_content: Optional[str] = None
@@ -73,22 +54,62 @@ class ProposalSchemeRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# --- Productos en Propuesta ---
+class ProposalProductCreate(BaseModel):
+    """Schema para agregar un producto a la propuesta.
+
+    Cada producto lleva exactamente UN esquema comercial propio (regla de
+    negocio: un esquema por producto/servicio).
+    """
+    product_name: str
+    product_type: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    scheme: ProposalSchemeCreate
+
+
+class ProposalProductRead(BaseModel):
+    """Schema para leer un producto de propuesta con su esquema."""
+    id: int
+    product_name: str
+    product_type: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    scheme: Optional[ProposalSchemeRead] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 # --- Propuesta ---
 class ProposalCreate(BaseModel):
-    """Schema para crear una propuesta."""
+    """Schema para crear una propuesta.
+
+    El esquema comercial viaja DENTRO de cada producto (un esquema por
+    producto). La lista `schemes` a nivel propuesta es contrato viejo y se
+    rechaza explícitamente.
+    """
     title: str
     code: Optional[str] = None
     client_id: int
     combine_schemes: bool = True
     products: List[ProposalProductCreate] = []
-    schemes: List[ProposalSchemeCreate] = []
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_legacy_schemes_field(cls, data):
+        if isinstance(data, dict) and data.get("schemes"):
+            raise ValueError(
+                "El campo 'schemes' a nivel propuesta ya no existe — "
+                "cada producto debe incluir su esquema en el campo 'scheme'."
+            )
+        return data
 
     @model_validator(mode="after")
-    def _validate_combine_vs_schemes(self) -> "ProposalCreate":
-        if not self.combine_schemes and len(self.schemes) < 2:
+    def _validate_combine_vs_products(self) -> "ProposalCreate":
+        if not self.combine_schemes and len(self.products) < 2:
             raise ValueError(
-                "combine_schemes=False requiere al menos 2 esquemas — "
-                "no tiene sentido pedir 'Documentos separados' con un único esquema."
+                "combine_schemes=False requiere al menos 2 productos — "
+                "'Documentos separados' genera un documento por producto."
             )
         return self
 

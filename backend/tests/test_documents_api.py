@@ -20,10 +20,10 @@ from docx import Document as DocxReader
 from app.services.innti_service import InntiServiceError
 
 
-def _docx_text_from_zip_bytes(zip_bytes: bytes, scheme_keyword: str) -> str:
-    """Extrae todo el texto plano del .docx cuyo nombre contiene scheme_keyword."""
+def _docx_text_from_zip_bytes(zip_bytes: bytes, name_keyword: str) -> str:
+    """Extrae todo el texto plano del .docx cuyo nombre contiene name_keyword."""
     z = zipfile.ZipFile(io.BytesIO(zip_bytes))
-    name = next(n for n in z.namelist() if scheme_keyword in n and n.endswith(".docx"))
+    name = next(n for n in z.namelist() if name_keyword in n and n.endswith(".docx"))
     with z.open(name) as f:
         doc = DocxReader(io.BytesIO(f.read()))
     return "\n".join(p.text for p in doc.paragraphs)
@@ -45,21 +45,28 @@ def _create_proposal(client, sample_client_data, sample_proposal_data, creator_h
     return p_res.json()["id"]
 
 
-def _create_multi_scheme_proposal(client, sample_client_data, creator_headers) -> int:
-    """Crea una propuesta con dos esquemas y combine_schemes=False."""
+def _create_multi_product_proposal(client, sample_client_data, creator_headers) -> int:
+    """Crea una propuesta con dos productos (cada uno con su esquema) y combine_schemes=False."""
     c_res = client.post("/api/clients/", json=sample_client_data)
     assert c_res.status_code == status.HTTP_201_CREATED
     client_id = c_res.json()["id"]
 
     p_data = {
-        "title": "Propuesta multi-esquema",
+        "title": "Propuesta multi-producto",
         "code": "TEST-001",
         "client_id": client_id,
         "combine_schemes": False,
-        "products": [],
-        "schemes": [
-            {"scheme_type": "licensing", "payment_frequency": "unico"},
-            {"scheme_type": "services", "payment_frequency": "mensual"},
+        "products": [
+            {
+                "product_name": "Producto Licencias",
+                "product_type": "Plataforma",
+                "scheme": {"scheme_type": "licensing", "payment_frequency": "unico"},
+            },
+            {
+                "product_name": "Producto Servicios",
+                "product_type": "Plataforma",
+                "scheme": {"scheme_type": "services", "payment_frequency": "mensual"},
+            },
         ],
     }
     p_res = client.post("/api/proposals/", json=p_data, headers=creator_headers)
@@ -67,8 +74,8 @@ def _create_multi_scheme_proposal(client, sample_client_data, creator_headers) -
     return p_res.json()["id"]
 
 
-def _create_three_scheme_proposal(client, sample_client_data, creator_headers) -> dict:
-    """Crea una propuesta con 3 esquemas y contenido distintivo por esquema en la BD.
+def _create_three_product_proposal(client, sample_client_data, creator_headers) -> dict:
+    """Crea una propuesta con 3 productos, cada uno con su esquema y contenido distintivo.
 
     Devuelve el dict de la propuesta creada (con scheme ids para que el test
     pueda editar el contenido posteriormente).
@@ -76,35 +83,46 @@ def _create_three_scheme_proposal(client, sample_client_data, creator_headers) -
     c_res = client.post("/api/clients/", json=sample_client_data)
     client_id = c_res.json()["id"]
     p_data = {
-        "title": "Propuesta tres esquemas Medellín",
+        "title": "Propuesta tres productos Medellín",
         "code": "TEST-MED",
         "client_id": client_id,
         "combine_schemes": False,
-        "products": [],
-        "schemes": [
+        "products": [
             {
-                "scheme_type": "licensing",
-                "payment_frequency": "unico",
-                "scope_content": "<p>ALCANCE-LICENSING-UNICO</p>",
-                "economic_conditions": "<p>VALOR-LIC-100M</p>",
-                "payment_terms": "<p>PAGO-LIC-50-50</p>",
-                "ip_section": "<p>IP-LIC-MARKER</p>",
+                "product_name": "Producto Licencias",
+                "product_type": "Plataforma",
+                "scheme": {
+                    "scheme_type": "licensing",
+                    "payment_frequency": "unico",
+                    "scope_content": "<p>ALCANCE-LICENSING-UNICO</p>",
+                    "economic_conditions": "<p>VALOR-LIC-100M</p>",
+                    "payment_terms": "<p>PAGO-LIC-50-50</p>",
+                    "ip_section": "<p>IP-LIC-MARKER</p>",
+                },
             },
             {
-                "scheme_type": "services",
-                "payment_frequency": "mensual",
-                "scope_content": "<p>ALCANCE-SERVICES-MENSUAL</p>",
-                "economic_conditions": "<p>VALOR-SRV-MENSUAL</p>",
-                "payment_terms": "<p>PAGO-SRV-MENSUAL</p>",
-                "ip_section": "<p>IP-SRV-MARKER</p>",
+                "product_name": "Producto Servicios",
+                "product_type": "Plataforma",
+                "scheme": {
+                    "scheme_type": "services",
+                    "payment_frequency": "mensual",
+                    "scope_content": "<p>ALCANCE-SERVICES-MENSUAL</p>",
+                    "economic_conditions": "<p>VALOR-SRV-MENSUAL</p>",
+                    "payment_terms": "<p>PAGO-SRV-MENSUAL</p>",
+                    "ip_section": "<p>IP-SRV-MARKER</p>",
+                },
             },
             {
-                "scheme_type": "support_maintenance",
-                "payment_frequency": "anual",
-                "scope_content": "<p>ALCANCE-SUPPORT-ANUAL</p>",
-                "economic_conditions": "<p>VALOR-SUP-ANUAL</p>",
-                "payment_terms": "<p>PAGO-SUP-ANUAL</p>",
-                "ip_section": "<p>IP-SUP-MARKER</p>",
+                "product_name": "Producto Soporte",
+                "product_type": "Plataforma",
+                "scheme": {
+                    "scheme_type": "support_maintenance",
+                    "payment_frequency": "anual",
+                    "scope_content": "<p>ALCANCE-SUPPORT-ANUAL</p>",
+                    "economic_conditions": "<p>VALOR-SUP-ANUAL</p>",
+                    "payment_terms": "<p>PAGO-SUP-ANUAL</p>",
+                    "ip_section": "<p>IP-SUP-MARKER</p>",
+                },
             },
         ],
     }
@@ -175,12 +193,12 @@ def test_generate_pdf_conversion_error_returns_500(client, creator_headers, samp
 
 
 # ── Tests: documentos separados (combine_schemes=False) ──────────────────────
-def test_generate_document_separate_returns_zip(client, creator_headers, sample_client_data):
+def test_generate_document_separate_returns_zip_per_product(client, creator_headers, sample_client_data):
     """
-    Con combine_schemes=False y 2 esquemas, generate-document devuelve un ZIP
-    que contiene un .docx por esquema.
+    Con combine_schemes=False y 2 productos, generate-document devuelve un ZIP
+    que contiene un .docx POR PRODUCTO (nombre con slug del producto).
     """
-    pid = _create_multi_scheme_proposal(client, sample_client_data, creator_headers)
+    pid = _create_multi_product_proposal(client, sample_client_data, creator_headers)
 
     with patch("app.routers.documents.PortfolioService") as MockPortfolio:
         MockPortfolio.return_value.get_by_names.return_value = []
@@ -195,16 +213,16 @@ def test_generate_document_separate_returns_zip(client, creator_headers, sample_
     z = zipfile.ZipFile(io.BytesIO(response.content))
     names = z.namelist()
     assert len(names) == 2
-    assert any("licenciamiento" in n for n in names)
-    assert any("servicios" in n for n in names)
+    assert any("producto-licencias" in n for n in names)
+    assert any("producto-servicios" in n for n in names)
 
 
 def test_generate_pdf_separate_returns_zip(client, creator_headers, sample_client_data):
     """
-    Con combine_schemes=False y 2 esquemas, generate-pdf devuelve un ZIP
-    con un .pdf por esquema (convert_docx_to_pdf se parchea para crear el .pdf vacío).
+    Con combine_schemes=False y 2 productos, generate-pdf devuelve un ZIP
+    con un .pdf por producto (convert_docx_to_pdf se parchea para crear el .pdf vacío).
     """
-    pid = _create_multi_scheme_proposal(client, sample_client_data, creator_headers)
+    pid = _create_multi_product_proposal(client, sample_client_data, creator_headers)
 
     def fake_convert(docx_path: str, pdf_path: str) -> None:
         Path(pdf_path).write_bytes(b"%PDF-1.4")
@@ -230,31 +248,36 @@ def test_generate_pdf_separate_returns_zip(client, creator_headers, sample_clien
     assert all(n.endswith(".pdf") for n in names)
 
 
-def test_create_proposal_separate_with_single_scheme_rejected(
-    client, creator_headers, sample_client_data, sample_proposal_data
+def test_create_proposal_separate_with_single_product_rejected(
+    client, creator_headers, sample_client_data
 ):
-    """combine_schemes=False con un único esquema debe ser rechazado con 422.
+    """combine_schemes=False con un único producto debe ser rechazado con 422.
 
-    No tiene sentido pedir "Documentos separados" si solo hay un esquema —
+    No tiene sentido pedir "Documentos separados" si solo hay un producto —
     el validator de ProposalCreate lo rechaza explícitamente.
     """
     c_res = client.post("/api/clients/", json=sample_client_data)
     client_id = c_res.json()["id"]
     p_data = {
-        **sample_proposal_data,
+        "title": "Separado con un producto",
+        "code": "TEST-SEP1",
         "client_id": client_id,
         "combine_schemes": False,
-        "schemes": [{"scheme_type": "licensing", "payment_frequency": "unico"}],
+        "products": [{
+            "product_name": "Producto Único",
+            "product_type": "Plataforma",
+            "scheme": {"scheme_type": "licensing", "payment_frequency": "unico"},
+        }],
     }
     p_res = client.post("/api/proposals/", json=p_data, headers=creator_headers)
     assert p_res.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
     assert "combine_schemes" in p_res.text
 
 
-def test_generate_document_single_scheme_returns_docx(
+def test_generate_document_combined_returns_docx(
     client, creator_headers, sample_client_data, sample_proposal_data
 ):
-    """Con un solo esquema, generate-document devuelve un .docx único (nunca ZIP)."""
+    """Con combine_schemes=True, generate-document devuelve un .docx único (nunca ZIP)."""
     pid = _create_proposal(client, sample_client_data, sample_proposal_data, creator_headers)
 
     with patch("app.routers.documents.PortfolioService") as MockPortfolio:
@@ -274,7 +297,7 @@ def test_generate_document_separate_innti_per_scheme(client, creator_headers, sa
     condiciones económicas se generan con el tipo de esquema individual (no combinado).
     Cada documento debe recibir el contenido de pago correspondiente a su esquema.
     """
-    pid = _create_multi_scheme_proposal(client, sample_client_data, creator_headers)
+    pid = _create_multi_product_proposal(client, sample_client_data, creator_headers)
 
     with patch("app.routers.documents.PortfolioService") as MockPortfolio:
         MockPortfolio.return_value.get_by_names.return_value = []
@@ -319,18 +342,21 @@ def test_generate_document_separate_innti_per_scheme(client, creator_headers, sa
     assert "licensing" in economic_calls
     assert "services" in economic_calls
 
+    # El alcance de cada esquema se genera SOLO con su producto vinculado
+    scope_calls = [call.args[0] for call in mock_innti.generate_scope_section.call_args_list]
+    assert ["Producto Licencias"] in scope_calls
+    assert ["Producto Servicios"] in scope_calls
 
-# ── Tests: contenido diferenciado por esquema (regresión del bug reportado) ──
-def test_separate_zip_contains_different_content_per_scheme(
+
+# ── Tests: contenido diferenciado por producto (regresión del bug reportado) ──
+def test_separate_zip_contains_different_content_per_product(
     client, creator_headers, sample_client_data
 ):
     """REGRESIÓN: el bug reportado era que el ZIP separado tenía N archivos
     con contenido idéntico (solo cambiaba el nombre). Ahora cada .docx debe
-    incluir el contenido distintivo de su esquema (alcance, IP, pago).
-
-    Caso modelado en el PDF de la reunión (Consorcio MD Medellín).
+    incluir el contenido distintivo del esquema de SU producto (alcance, IP, pago).
     """
-    proposal = _create_three_scheme_proposal(client, sample_client_data, creator_headers)
+    proposal = _create_three_product_proposal(client, sample_client_data, creator_headers)
     pid = proposal["id"]
 
     with patch("app.routers.documents.PortfolioService") as MockPortfolio:
@@ -343,9 +369,9 @@ def test_separate_zip_contains_different_content_per_scheme(
     assert response.status_code == status.HTTP_200_OK
     assert response.headers["content-type"] == "application/zip"
 
-    text_lic = _docx_text_from_zip_bytes(response.content, "licenciamiento")
-    text_srv = _docx_text_from_zip_bytes(response.content, "servicios")
-    text_sup = _docx_text_from_zip_bytes(response.content, "soporte_mantenimiento")
+    text_lic = _docx_text_from_zip_bytes(response.content, "producto-licencias")
+    text_srv = _docx_text_from_zip_bytes(response.content, "producto-servicios")
+    text_sup = _docx_text_from_zip_bytes(response.content, "producto-soporte")
 
     # Cada documento contiene SU propio alcance, no el de los otros
     assert "ALCANCE-LICENSING-UNICO" in text_lic
@@ -383,10 +409,17 @@ def test_separate_zip_saas_omits_excluded_services_section(
         "code": "TEST-SAAS",
         "client_id": client_id,
         "combine_schemes": False,
-        "products": [],
-        "schemes": [
-            {"scheme_type": "licensing", "payment_frequency": "unico"},
-            {"scheme_type": "services", "payment_frequency": "mensual"},
+        "products": [
+            {
+                "product_name": "Producto Licencias",
+                "product_type": "Plataforma",
+                "scheme": {"scheme_type": "licensing", "payment_frequency": "unico"},
+            },
+            {
+                "product_name": "Producto Servicios",
+                "product_type": "Plataforma",
+                "scheme": {"scheme_type": "services", "payment_frequency": "mensual"},
+            },
         ],
     }
     p_res = client.post("/api/proposals/", json=p_data, headers=creator_headers)
@@ -400,8 +433,8 @@ def test_separate_zip_saas_omits_excluded_services_section(
         )
 
     assert response.status_code == status.HTTP_200_OK
-    text_lic = _docx_text_from_zip_bytes(response.content, "licenciamiento")
-    text_srv = _docx_text_from_zip_bytes(response.content, "servicios")
+    text_lic = _docx_text_from_zip_bytes(response.content, "producto-licencias")
+    text_srv = _docx_text_from_zip_bytes(response.content, "producto-servicios")
 
     # Licensing SÍ debe tener la sección de exclusiones (heading)
     assert "SERVICIOS EXCLUIDOS" in text_lic.upper()
@@ -409,11 +442,11 @@ def test_separate_zip_saas_omits_excluded_services_section(
     assert "SERVICIOS EXCLUIDOS" not in text_srv.upper()
 
 
-def test_combined_docx_contains_all_schemes(client, creator_headers, sample_client_data):
-    """Modo combinado: un único .docx debe contener un bloque por cada esquema."""
-    proposal = _create_three_scheme_proposal(client, sample_client_data, creator_headers)
+def test_combined_docx_contains_block_per_product(client, creator_headers, sample_client_data):
+    """Modo unificado: un único .docx con un bloque «PRODUCTO — ESQUEMA» por producto."""
+    proposal = _create_three_product_proposal(client, sample_client_data, creator_headers)
     pid = proposal["id"]
-    # Cambiar a combinado vía PATCH
+    # Cambiar a unificado vía PATCH
     client.patch(f"/api/proposals/{pid}", json={"combine_schemes": True})
 
     with patch("app.routers.documents.PortfolioService") as MockPortfolio:
@@ -428,14 +461,144 @@ def test_combined_docx_contains_all_schemes(client, creator_headers, sample_clie
 
     doc = DocxReader(io.BytesIO(response.content))
     text = "\n".join(p.text for p in doc.paragraphs)
-    # Aparecen los 3 marcadores de esquema en un solo documento
-    assert "ESQUEMA: LICENCIAMIENTO" in text
-    assert "ESQUEMA: PRESTACIÓN DE SERVICIOS" in text
-    assert "ESQUEMA: SOPORTE Y MANTENIMIENTO" in text
+    # Aparece un bloque por producto, titulado «PRODUCTO — ESQUEMA»
+    assert "PRODUCTO LICENCIAS — LICENCIAMIENTO" in text
+    assert "PRODUCTO SERVICIOS — PRESTACIÓN DE SERVICIOS" in text
+    assert "PRODUCTO SOPORTE — SOPORTE Y MANTENIMIENTO" in text
     # Y los IP de cada esquema están todos presentes
     assert "IP-LIC-MARKER" in text
     assert "IP-SRV-MARKER" in text
     assert "IP-SUP-MARKER" in text
+
+
+def test_combined_docx_two_products_same_scheme_two_blocks(
+    client, creator_headers, sample_client_data
+):
+    """Dos productos con el MISMO tipo de esquema generan DOS bloques en el unificado."""
+    c_res = client.post("/api/clients/", json=sample_client_data)
+    client_id = c_res.json()["id"]
+    p_data = {
+        "title": "Dos licencias",
+        "code": "TEST-2LIC",
+        "client_id": client_id,
+        "combine_schemes": True,
+        "products": [
+            {
+                "product_name": "Producto Alfa",
+                "product_type": "Plataforma",
+                "scheme": {
+                    "scheme_type": "licensing",
+                    "payment_frequency": "unico",
+                    "economic_conditions": "<p>VALOR-ALFA</p>",
+                },
+            },
+            {
+                "product_name": "Producto Beta",
+                "product_type": "Plataforma",
+                "scheme": {
+                    "scheme_type": "licensing",
+                    "payment_frequency": "unico",
+                    "economic_conditions": "<p>VALOR-BETA</p>",
+                },
+            },
+        ],
+    }
+    p_res = client.post("/api/proposals/", json=p_data, headers=creator_headers)
+    pid = p_res.json()["id"]
+
+    with patch("app.routers.documents.PortfolioService") as MockPortfolio:
+        MockPortfolio.return_value.get_by_names.return_value = []
+        response = client.post(
+            f"/api/proposals/{pid}/generate-document",
+            params={"use_innti": False},
+        )
+
+    assert response.status_code == status.HTTP_200_OK
+    doc = DocxReader(io.BytesIO(response.content))
+    text = "\n".join(p.text for p in doc.paragraphs)
+    assert "PRODUCTO ALFA — LICENCIAMIENTO" in text
+    assert "PRODUCTO BETA — LICENCIAMIENTO" in text
+    assert "VALOR-ALFA" in text
+    assert "VALOR-BETA" in text
+
+
+# ── Tests: propuestas legadas (esquemas sin product_id) ──────────────────────
+def _create_legacy_proposal(db_session, combine_schemes: bool):
+    """Crea directamente en BD una propuesta legada: esquemas SIN product_id."""
+    from app.models.client import Client
+    from app.models.proposal import Proposal, ProposalScheme, SchemeType
+
+    client_obj = Client(name="Cliente Legado", entity="Entidad Legada")
+    db_session.add(client_obj)
+    db_session.flush()
+
+    proposal = Proposal(
+        title="Propuesta legada",
+        code="LEG-001",
+        client_id=client_obj.id,
+        combine_schemes=combine_schemes,
+    )
+    db_session.add(proposal)
+    db_session.flush()
+
+    db_session.add(ProposalScheme(
+        proposal_id=proposal.id,
+        scheme_type=SchemeType.LICENSING,
+        payment_frequency="unico",
+        ip_section="<p>IP-LEGADA-LIC</p>",
+    ))
+    db_session.add(ProposalScheme(
+        proposal_id=proposal.id,
+        scheme_type=SchemeType.SERVICES,
+        payment_frequency="mensual",
+        ip_section="<p>IP-LEGADA-SRV</p>",
+    ))
+    db_session.commit()
+    return proposal.id
+
+
+def test_legacy_proposal_separate_keeps_per_scheme_files(
+    client, db_session, creator_headers
+):
+    """Propuesta legada + separado: un archivo POR ESQUEMA (comportamiento anterior)."""
+    pid = _create_legacy_proposal(db_session, combine_schemes=False)
+
+    with patch("app.routers.documents.PortfolioService") as MockPortfolio:
+        MockPortfolio.return_value.get_by_names.return_value = []
+        response = client.post(
+            f"/api/proposals/{pid}/generate-document",
+            params={"use_innti": False},
+        )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.headers["content-type"] == "application/zip"
+    z = zipfile.ZipFile(io.BytesIO(response.content))
+    names = z.namelist()
+    assert len(names) == 2
+    assert any("licenciamiento" in n for n in names)
+    assert any("servicios" in n for n in names)
+
+
+def test_legacy_proposal_combined_keeps_scheme_headings(
+    client, db_session, creator_headers
+):
+    """Propuesta legada + unificado: bloques «ESQUEMA: …» (comportamiento anterior)."""
+    pid = _create_legacy_proposal(db_session, combine_schemes=True)
+
+    with patch("app.routers.documents.PortfolioService") as MockPortfolio:
+        MockPortfolio.return_value.get_by_names.return_value = []
+        response = client.post(
+            f"/api/proposals/{pid}/generate-document",
+            params={"use_innti": False},
+        )
+
+    assert response.status_code == status.HTTP_200_OK
+    doc = DocxReader(io.BytesIO(response.content))
+    text = "\n".join(p.text for p in doc.paragraphs)
+    assert "ESQUEMA: LICENCIAMIENTO" in text
+    assert "ESQUEMA: PRESTACIÓN DE SERVICIOS" in text
+    assert "IP-LEGADA-LIC" in text
+    assert "IP-LEGADA-SRV" in text
 
 
 # ── Tests: generate-annex ────────────────────────────────────────────────────

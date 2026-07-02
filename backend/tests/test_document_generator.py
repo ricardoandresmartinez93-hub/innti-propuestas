@@ -419,6 +419,8 @@ class TestDocumentsRouterIntegration:
         mock_proposal.context_content = ""
         mock_proposal.letter_content = ""
         mock_proposal.combine_schemes = True
+        # Estos tests modelan el flujo legado (esquemas sin product_id)
+        mock_proposal.uses_product_schemes = False
         return mock_proposal
 
     def test_router_passes_excluded_services_to_generator(self):

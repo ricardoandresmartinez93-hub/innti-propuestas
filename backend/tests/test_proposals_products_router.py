@@ -53,12 +53,13 @@ def test_delete_proposal_not_found(client, creator_headers):
 # ---------- POST /{id}/products ----------
 
 def test_add_product_success(client, draft_proposal_id):
-    """POST /{id}/products agrega un producto a propuesta en DRAFT."""
+    """POST /{id}/products agrega un producto (con su esquema) a propuesta en DRAFT."""
     new_product = {
         "product_name": "Qx-Notarios",
         "product_type": "Plataforma",
         "description": "Plataforma notarial",
         "category": "nuevo",
+        "scheme": {"scheme_type": "licensing", "payment_frequency": "unico"},
     }
     response = client.post(
         f"/api/proposals/{draft_proposal_id}/products", json=new_product
@@ -67,6 +68,8 @@ def test_add_product_success(client, draft_proposal_id):
     data = response.json()
     assert data["product_name"] == "Qx-Notarios"
     assert data["product_type"] == "Plataforma"
+    assert data["scheme"]["scheme_type"] == "licensing"
+    assert data["scheme"]["product_id"] == data["id"]
 
     # Verify the product is now part of the proposal
     list_res = client.get(f"/api/proposals/{draft_proposal_id}")
@@ -83,6 +86,7 @@ def test_add_product_proposal_not_found(client):
             "product_type": "Plataforma",
             "description": "...",
             "category": "nuevo",
+            "scheme": {"scheme_type": "licensing", "payment_frequency": "unico"},
         },
     )
     assert response.status_code == status.HTTP_404_NOT_FOUND
@@ -103,6 +107,7 @@ def test_add_product_blocked_when_not_draft(
             "product_type": "Plataforma",
             "description": "...",
             "category": "nuevo",
+            "scheme": {"scheme_type": "licensing", "payment_frequency": "unico"},
         },
     )
     assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -162,19 +167,21 @@ def test_remove_product_not_in_proposal(client, draft_proposal_id):
 # ---------- PUT /{id}/products (replace all) ----------
 
 def test_replace_products_success(client, draft_proposal_id):
-    """PUT /{id}/products reemplaza la lista entera."""
+    """PUT /{id}/products reemplaza la lista entera (productos con su esquema)."""
     new_products = [
         {
             "product_name": "Qx-Recaudo",
             "product_type": "Plataforma",
             "description": "Recaudo electrónico",
             "category": "nuevo",
+            "scheme": {"scheme_type": "licensing", "payment_frequency": "unico"},
         },
         {
             "product_name": "Qx-Pasaportes",
             "product_type": "Plataforma",
             "description": "Pasaportes",
             "category": "modernización",
+            "scheme": {"scheme_type": "services", "payment_frequency": "mensual"},
         },
     ]
     response = client.put(
@@ -188,7 +195,12 @@ def test_replace_products_success(client, draft_proposal_id):
 
     # Verify the previous products fueron reemplazados
     list_res = client.get(f"/api/proposals/{draft_proposal_id}")
-    assert {p["product_name"] for p in list_res.json()["products"]} == names
+    proposal_data = list_res.json()
+    assert {p["product_name"] for p in proposal_data["products"]} == names
+    # Los esquemas viejos se reemplazaron junto con los productos
+    assert len(proposal_data["schemes"]) == 2
+    scheme_types = {s["scheme_type"] for s in proposal_data["schemes"]}
+    assert scheme_types == {"licensing", "services"}
 
 
 def test_replace_products_proposal_not_found(client):
@@ -213,6 +225,7 @@ def test_replace_products_blocked_when_not_draft(
                 "product_type": "Plataforma",
                 "description": "...",
                 "category": "nuevo",
+                "scheme": {"scheme_type": "licensing", "payment_frequency": "unico"},
             }
         ],
     )

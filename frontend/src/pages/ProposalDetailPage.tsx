@@ -116,9 +116,12 @@ const ProposalDetailPage: React.FC = () => {
 
       // UX: avisar al usuario cuando se descarga un ZIP con N documentos separados.
       if (isZip) {
-        const count = proposal.schemes.length
+        const usesProductSchemes =
+          proposal.schemes.length > 0 && proposal.schemes.every(s => s.product_id != null)
+        const count = usesProductSchemes ? proposal.products.length : proposal.schemes.length
+        const unit = usesProductSchemes ? 'uno por producto' : 'uno por esquema'
         alert(
-          `Se generaron ${count} documentos separados (uno por esquema) y se empaquetaron en ${filename}.`
+          `Se generaron ${count} documentos separados (${unit}) y se empaquetaron en ${filename}.`
         )
       }
     } catch (err) {
@@ -362,10 +365,23 @@ const ProposalDetailPage: React.FC = () => {
     }
   }
 
+  // Modelo nuevo: separado es por producto; legadas: por esquema
+  const usesProductSchemes =
+    proposal != null &&
+    proposal.schemes.length > 0 &&
+    proposal.schemes.every(s => s.product_id != null)
+  const separableCount = proposal == null
+    ? 0
+    : usesProductSchemes ? proposal.products.length : proposal.schemes.length
+
   const handleToggleCombineSchemes = async () => {
     if (!proposal) return
-    if (proposal.schemes.length < 2) {
-      alert('La opción "Documentos separados" requiere 2 o más esquemas.')
+    if (separableCount < 2) {
+      alert(
+        usesProductSchemes
+          ? 'La opción "Documentos separados" requiere 2 o más productos.'
+          : 'La opción "Documentos separados" requiere 2 o más esquemas.'
+      )
       return
     }
     const next = !proposal.combine_schemes
@@ -504,9 +520,11 @@ const ProposalDetailPage: React.FC = () => {
 
           <div className="bg-white p-4 rounded-lg shadow border">
             <h4 className="text-sm font-semibold text-gray-900 mb-3">Configuración de Documentos</h4>
-            {proposal.schemes.length < 2 ? (
+            {separableCount < 2 ? (
               <p className="text-xs text-gray-500 italic">
-                Selecciona 2 o más esquemas al crear la propuesta para habilitar la opción "Documentos separados".
+                {usesProductSchemes
+                  ? 'Selecciona 2 o más productos al crear la propuesta para habilitar la opción "Documentos separados".'
+                  : 'Selecciona 2 o más esquemas al crear la propuesta para habilitar la opción "Documentos separados".'}
               </p>
             ) : (
               <div className="flex items-center bg-gray-50 p-1 rounded-lg border border-gray-200">
@@ -519,7 +537,7 @@ const ProposalDetailPage: React.FC = () => {
                       : 'text-gray-600 hover:text-blue-600'
                   }`}
                 >
-                  Combinar en uno
+                  Documento unificado
                 </button>
                 <button
                   type="button"

@@ -19,7 +19,8 @@ class PortfolioProductResponse(BaseModel):
     monetization_model: str
     pricing_model: str
     country: str
-    # Scheme types allowed for this product. Empty list = all MVP schemes allowed.
+    # Scheme types allowed for THIS product, already resolved by the backend
+    # (Excel column 9 or all MVP schemes, minus licensing for QloudSI services).
     allowed_schemes: List[str] = []
 
 
@@ -52,7 +53,7 @@ def list_products(
             monetization_model=p.monetization_model,
             pricing_model=p.pricing_model,
             country=p.country,
-            allowed_schemes=p.allowed_schemes,
+            allowed_schemes=service.get_allowed_schemes_for_product(p),
         )
         for p in products
     ]

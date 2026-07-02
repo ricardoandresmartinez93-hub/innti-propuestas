@@ -25,13 +25,16 @@ from app.services.proposal_content_resolver import (
 
 
 def _proposal(client_entity: str = "Consorcio ITS Medellín", schemes=None):
-    """Construye un mock mínimo de Proposal con un cliente."""
+    """Construye un mock mínimo de Proposal con un cliente (modo legado)."""
     proposal = MagicMock()
     proposal.client = MagicMock()
     proposal.client.entity = client_entity
     proposal.context_content = "<p>Contexto global</p>"
     proposal.letter_content = "<p>Carta global</p>"
     proposal.schemes = schemes or []
+    # Por defecto se comporta como propuesta legada (bloques por esquema)
+    proposal.uses_product_schemes = False
+    proposal.products = []
     return proposal
 
 
@@ -203,3 +206,52 @@ def test_combined_payload_global_fields():
 
     assert payload["context_text"] == "<p>Contexto global</p>"
     assert payload["letter_text"] == "<p>Carta global</p>"
+
+
+# ---------------------------------------------------------------------------
+# resolve_combined_content — modo por producto (uses_product_schemes)
+# ---------------------------------------------------------------------------
+
+def _product(name: str, scheme):
+    p = MagicMock()
+    p.product_name = name
+    p.scheme = scheme
+    return p
+
+
+def test_combined_payload_per_product_blocks_in_product_order():
+    """Modelo nuevo: un bloque por producto, en el orden de los productos."""
+    lic = _scheme("licensing", scheme_id=1, scope="<p>Alcance L</p>")
+    srv = _scheme("services", scheme_id=2, scope="<p>Alcance S</p>")
+    proposal = _proposal(schemes=[srv, lic])
+    proposal.uses_product_schemes = True
+    proposal.products = [_product("Producto A", lic), _product("Producto B", srv)]
+
+    payload = resolve_combined_content(proposal)
+
+    assert [b["product_name"] for b in payload["schemes"]] == ["Producto A", "Producto B"]
+    assert payload["schemes"][0]["scheme_type"] == "licensing"
+    assert payload["schemes"][1]["scheme_type"] == "services"
+
+
+def test_combined_payload_same_scheme_type_two_products_two_blocks():
+    """Dos productos con el mismo tipo de esquema producen dos bloques distintos."""
+    lic_a = _scheme("licensing", scheme_id=1, economic="<p>VALOR-A</p>")
+    lic_b = _scheme("licensing", scheme_id=2, economic="<p>VALOR-B</p>")
+    proposal = _proposal(schemes=[lic_a, lic_b])
+    proposal.uses_product_schemes = True
+    proposal.products = [_product("Prod A", lic_a), _product("Prod B", lic_b)]
+
+    payload = resolve_combined_content(proposal)
+
+    assert len(payload["schemes"]) == 2
+    assert payload["schemes"][0]["economic_conditions"] == "<p>VALOR-A</p>"
+    assert payload["schemes"][1]["economic_conditions"] == "<p>VALOR-B</p>"
+
+
+def test_combined_payload_legacy_has_no_product_name():
+    """Modo legado: los bloques no llevan product_name (bloques por esquema)."""
+    schemes = [_scheme("licensing", scheme_id=1)]
+    payload = resolve_combined_content(_proposal(schemes=schemes))
+
+    assert "product_name" not in payload["schemes"][0]

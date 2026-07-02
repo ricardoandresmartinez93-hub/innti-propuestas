@@ -63,15 +63,40 @@ El servicio `app/services/approval_service.py` contiene toda la lógica de trans
   - `generate_cover_letter(client_name, position, entity, subject)` — Carta de presentación
   - `enrich_product_description(product_name, base_description)` — Enriquece descripción técnica para el anexo
 
-## Restricción Producto → Esquemas
+## Relación Producto → Esquema (un esquema por producto)
 
-Desde junio 2026, los esquemas comerciales disponibles dependen de los productos del portafolio seleccionados:
+Desde julio 2026, **cada producto de una propuesta tiene asignado exactamente UN
+esquema** (`ProposalScheme.product_id`). Ya NO existe la intersección de esquemas
+entre productos.
 
-- **Fuente de datos**: columna 9 ("Esquemas Permitidos") del Excel, con valores separados por coma.
-- **Cálculo**: INTERSECCIÓN de esquemas de todos los productos seleccionados. Solo se muestran esquemas válidos para TODOS los productos. Un producto sin restricción aporta todos los MVP schemes (no estrecha el conjunto). Intersección vacía → aviso en UI, no se puede avanzar al paso 3.
-- **Retrocompatibilidad**: celda vacía o columna ausente = todos los MVP schemes permitidos.
-- **Validación en backend**: `POST /api/proposals/` retorna 422 si algún esquema enviado no es compatible con los productos.
-- **Método clave**: `PortfolioService.get_allowed_schemes_for_products(product_names: List[str]) -> List[str]`
+- **Contrato de creación**: en `POST /api/proposals/` cada producto embebe su
+  esquema en el campo `scheme`. La lista `schemes` a nivel propuesta (contrato
+  viejo) retorna 422.
+- **Esquemas permitidos POR PRODUCTO**: columna 9 ("Esquemas Permitidos") del
+  Excel, o todos los MVP schemes si está vacía. Método clave:
+  `PortfolioService.get_allowed_schemes_for_product(product) -> List[str]`.
+  `GET /api/portfolio/products` devuelve `allowed_schemes` ya resuelto.
+- **Regla dura QloudSI**: los productos con `product_type` que contenga
+  "QloudSI" (case-insensitive) NUNCA pueden tener el esquema `licensing`,
+  aunque el Excel lo liste. Fuente de verdad:
+  `is_qloudsi_product()` + `QLOUDSI_FORBIDDEN_SCHEMES` en
+  `app/services/portfolio_service.py`. El backend valida con 422 y el
+  portafolio excluye `licensing` de `allowed_schemes` para QloudSI.
+- **Dos productos pueden compartir el mismo tipo de esquema** — cada uno
+  mantiene su propia fila `ProposalScheme` con contenido independiente.
+
+## Generación de documentos (`combine_schemes`)
+
+- `combine_schemes=true` → **documento unificado**: 1 archivo con un bloque
+  «PRODUCTO — ESQUEMA» por producto (alcance, plazo, condiciones económicas,
+  forma de pago, exclusiones, PI de SU esquema).
+- `combine_schemes=false` → **documentos separados**: un `.docx`/`.pdf` POR
+  PRODUCTO (nombre con slug del producto), empaquetados en ZIP. Requiere ≥2
+  productos (validado con 422 al crear).
+- **Propuestas legadas**: esquemas con `product_id NULL` (previas a la
+  migración `scripts/migrate_schemes_per_product.py`) conservan el
+  comportamiento anterior: bloques y archivos POR ESQUEMA. El switch es
+  `Proposal.uses_product_schemes`.
 
 ## Terminología Clave
 - **Innti**: Motor de IA corporativa de Quipux (LiteLLM).

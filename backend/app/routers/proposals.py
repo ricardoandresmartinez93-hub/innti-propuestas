@@ -19,38 +19,62 @@ from app.schemas.proposal import (
     ProposalSchemeRead, ProposalSchemeUpdate,
 )
 from app.routers.portfolio import get_portfolio_service
-from app.services.portfolio_service import MVP_SCHEME_STRINGS
+from app.services.portfolio_service import (
+    QLOUDSI_FORBIDDEN_SCHEMES,
+    is_qloudsi_product,
+)
 
 router = APIRouter(prefix="/api/proposals", tags=["Propuestas"])
 
 
-def _validate_scheme_product_compatibility(
-    product_names: List[str],
-    scheme_types: List[SchemeType],
-    portfolio_service,
-) -> None:
-    """Raises HTTP 422 if any scheme is not allowed for the given products.
+def _resolve_product_type(product: ProposalProductCreate, portfolio_service) -> str:
+    """Tipo de producto: el del payload o, si viene vacío, el del portafolio."""
+    if product.product_type:
+        return product.product_type
+    match = next(
+        (
+            p for p in portfolio_service.get_products()
+            if p.name.lower() == product.product_name.lower()
+        ),
+        None,
+    )
+    return match.product_type if match else ""
 
-    Uses a lenient fallback: if a product is not found in the portfolio or has
-    no scheme restrictions, all MVP schemes are treated as valid for that product.
-    This preserves backward compatibility when the Excel lacks the column.
+
+def _validate_product_scheme(product: ProposalProductCreate, portfolio_service) -> None:
+    """Raises HTTP 422 si el esquema del producto viola una regla de negocio.
+
+    Reglas, en orden: esquema disponible en el MVP; servicios QloudSI no pueden
+    tener Licenciamiento (regla dura, independiente del Excel); el esquema debe
+    estar en la lista permitida del producto (columna 9 del Excel, ya filtrada
+    por la regla QloudSI cuando el producto existe en el portafolio).
     """
-    if not product_names or not scheme_types:
-        return
+    scheme_type = product.scheme.scheme_type
 
-    allowed_schemes = portfolio_service.get_allowed_schemes_for_products(product_names)
-    # Empty result means all MVP schemes are valid (no restriction)
-    if not allowed_schemes:
-        allowed_schemes = list(MVP_SCHEME_STRINGS)
+    if scheme_type not in MVP_SCHEME_TYPES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"El esquema '{scheme_type.value}' no está disponible en el MVP. "
+                   f"Esquemas válidos: licensing, services, support_maintenance",
+        )
 
-    invalid = [s.value for s in scheme_types if s.value not in allowed_schemes]
-    if invalid:
+    product_type = _resolve_product_type(product, portfolio_service)
+    if is_qloudsi_product(product_type) and scheme_type.value in QLOUDSI_FORBIDDEN_SCHEMES:
         raise HTTPException(
             status_code=422,
             detail=(
-                f"Los siguientes esquemas no están permitidos para los productos seleccionados: "
-                f"{', '.join(invalid)}. "
-                f"Esquemas permitidos: {', '.join(allowed_schemes)}"
+                f"El producto '{product.product_name}' es un servicio QloudSI y no puede "
+                f"tener el esquema Licenciamiento. Elegí otro esquema para este servicio."
+            ),
+        )
+
+    allowed = portfolio_service.get_allowed_schemes_for_product_name(product.product_name)
+    if scheme_type.value not in allowed:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"El esquema '{scheme_type.value}' no está permitido para el producto "
+                f"'{product.product_name}'. Esquemas permitidos: {', '.join(allowed)}"
             ),
         )
 
@@ -62,22 +86,14 @@ def create_proposal(
     current_user: User = Depends(require_creator),
     portfolio_svc=Depends(get_portfolio_service),
 ):
-    """Crea una nueva propuesta comercial."""
-    # Validar esquemas MVP
-    for scheme in data.schemes:
-        if scheme.scheme_type not in MVP_SCHEME_TYPES:
-            raise HTTPException(
-                status_code=422,  # HTTP 422 Unprocessable Content (deprecó UNPROCESSABLE_ENTITY)
-                detail=f"El esquema '{scheme.scheme_type}' no está disponible en el MVP. "
-                       f"Esquemas válidos: licensing, services, support_maintenance"
-            )
+    """Crea una nueva propuesta comercial.
 
-    # Validar compatibilidad esquema-producto según el portafolio
-    _validate_scheme_product_compatibility(
-        product_names=[p.product_name for p in data.products],
-        scheme_types=[s.scheme_type for s in data.schemes],
-        portfolio_service=portfolio_svc,
-    )
+    Cada producto del payload trae su propio esquema (un esquema por producto);
+    el esquema se persiste vinculado al producto vía product_id.
+    """
+    # Validar reglas de negocio por producto (MVP, QloudSI, columna 9)
+    for prod in data.products:
+        _validate_product_scheme(prod, portfolio_svc)
 
     # Verificar que el cliente existe
     client = db.query(Client).filter(Client.id == data.client_id).first()
@@ -96,7 +112,7 @@ def create_proposal(
     db.add(proposal)
     db.flush()
 
-    # Agregar productos
+    # Agregar cada producto con su esquema vinculado
     for prod in data.products:
         db_prod = ProposalProduct(
             proposal_id=proposal.id,
@@ -106,11 +122,12 @@ def create_proposal(
             category=prod.category,
         )
         db.add(db_prod)
+        db.flush()
 
-    # Agregar esquemas (con su contenido inicial opcional)
-    for scheme in data.schemes:
+        scheme = prod.scheme
         db_scheme = ProposalScheme(
             proposal_id=proposal.id,
+            product_id=db_prod.id,
             scheme_type=scheme.scheme_type,
             payment_frequency=scheme.payment_frequency,
             scope_content=scheme.scope_content,
@@ -223,9 +240,12 @@ def delete_proposal(proposal_id: int, db: Session = Depends(get_db), current_use
 
 @router.post("/{proposal_id}/products", response_model=ProposalProductRead)
 def add_proposal_product(
-    proposal_id: int, data: ProposalProductCreate, db: Session = Depends(get_db)
+    proposal_id: int,
+    data: ProposalProductCreate,
+    db: Session = Depends(get_db),
+    portfolio_svc=Depends(get_portfolio_service),
 ):
-    """Agrega un producto a la propuesta."""
+    """Agrega un producto (con su esquema propio) a la propuesta."""
     proposal = db.query(Proposal).filter(Proposal.id == proposal_id).first()
     if not proposal:
         raise HTTPException(
@@ -239,6 +259,8 @@ def add_proposal_product(
             detail="Solo se pueden agregar productos a propuestas en estado DRAFT",
         )
 
+    _validate_product_scheme(data, portfolio_svc)
+
     db_product = ProposalProduct(
         proposal_id=proposal_id,
         product_name=data.product_name,
@@ -247,6 +269,21 @@ def add_proposal_product(
         category=data.category,
     )
     db.add(db_product)
+    db.flush()
+
+    db_scheme = ProposalScheme(
+        proposal_id=proposal_id,
+        product_id=db_product.id,
+        scheme_type=data.scheme.scheme_type,
+        payment_frequency=data.scheme.payment_frequency,
+        scope_content=data.scheme.scope_content,
+        validity_period=data.scheme.validity_period,
+        economic_conditions=data.scheme.economic_conditions,
+        payment_terms=data.scheme.payment_terms,
+        excluded_services=data.scheme.excluded_services,
+        ip_section=data.scheme.ip_section,
+    )
+    db.add(db_scheme)
     db.commit()
     db.refresh(db_product)
     return db_product
@@ -281,6 +318,8 @@ def remove_proposal_product(
             detail=f"Producto {product_id} no encontrado en la propuesta {proposal_id}",
         )
 
+    # El esquema vinculado al producto se elimina junto con él
+    db.query(ProposalScheme).filter(ProposalScheme.product_id == product_id).delete()
     db.delete(product)
     db.commit()
 
@@ -318,9 +357,12 @@ def update_proposal_scheme(
 
 @router.put("/{proposal_id}/products", response_model=List[ProposalProductRead])
 def replace_proposal_products(
-    proposal_id: int, data: List[ProposalProductCreate], db: Session = Depends(get_db)
+    proposal_id: int,
+    data: List[ProposalProductCreate],
+    db: Session = Depends(get_db),
+    portfolio_svc=Depends(get_portfolio_service),
 ):
-    """Reemplaza todos los productos de la propuesta."""
+    """Reemplaza todos los productos de la propuesta (cada uno con su esquema)."""
     proposal = db.query(Proposal).filter(Proposal.id == proposal_id).first()
     if not proposal:
         raise HTTPException(
@@ -334,10 +376,23 @@ def replace_proposal_products(
             detail="Solo se pueden modificar productos de propuestas en estado DRAFT",
         )
 
-    # Eliminar productos existentes
+    for item in data:
+        _validate_product_scheme(item, portfolio_svc)
+
+    # Eliminar productos existentes junto con sus esquemas vinculados
+    # (los esquemas legados con product_id NULL no se tocan)
+    old_product_ids = [
+        pid for (pid,) in db.query(ProposalProduct.id)
+        .filter(ProposalProduct.proposal_id == proposal_id)
+        .all()
+    ]
+    if old_product_ids:
+        db.query(ProposalScheme).filter(
+            ProposalScheme.product_id.in_(old_product_ids)
+        ).delete(synchronize_session=False)
     db.query(ProposalProduct).filter(ProposalProduct.proposal_id == proposal_id).delete()
 
-    # Agregar nuevos productos
+    # Agregar nuevos productos con su esquema
     new_products = []
     for item in data:
         db_product = ProposalProduct(
@@ -348,6 +403,19 @@ def replace_proposal_products(
             category=item.category,
         )
         db.add(db_product)
+        db.flush()
+        db.add(ProposalScheme(
+            proposal_id=proposal_id,
+            product_id=db_product.id,
+            scheme_type=item.scheme.scheme_type,
+            payment_frequency=item.scheme.payment_frequency,
+            scope_content=item.scheme.scope_content,
+            validity_period=item.scheme.validity_period,
+            economic_conditions=item.scheme.economic_conditions,
+            payment_terms=item.scheme.payment_terms,
+            excluded_services=item.scheme.excluded_services,
+            ip_section=item.scheme.ip_section,
+        ))
         new_products.append(db_product)
 
     db.commit()

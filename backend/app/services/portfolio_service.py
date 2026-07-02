@@ -11,6 +11,16 @@ import openpyxl
 # Scheme types available in the MVP (string values matching SchemeType enum)
 MVP_SCHEME_STRINGS: List[str] = ["licensing", "services", "support_maintenance"]
 
+# Business rule: QloudSI services can never be sold under these schemes.
+# Single source of truth — the API validates against this and the portfolio
+# endpoint filters allowed_schemes with it, so the frontend never sees them.
+QLOUDSI_FORBIDDEN_SCHEMES: set = {"licensing"}
+
+
+def is_qloudsi_product(product_type: Optional[str]) -> bool:
+    """True si el tipo de producto corresponde a un servicio QloudSI."""
+    return "qloudsi" in (product_type or "").lower()
+
 
 @dataclass
 class PortfolioProduct:
@@ -136,30 +146,25 @@ class PortfolioService:
         name_set = {n.lower() for n in names}
         return [p for p in products if p.name.lower() in name_set]
 
-    def get_allowed_schemes_for_products(self, product_names: List[str]) -> List[str]:
-        """Returns the intersection of allowed schemes across the given product names.
+    def get_allowed_schemes_for_product(self, product: PortfolioProduct) -> List[str]:
+        """Returns the scheme types allowed for a single product.
 
-        A product with no scheme restrictions (empty allowed_schemes or not found)
-        contributes all MVP schemes to the intersection — it does not restrict anything.
-        Returns an empty list when product_names is empty.
-        An empty result means the selected products have no schemes in common.
+        Base: column 9 of the Excel (allowed_schemes), or all MVP schemes when
+        the product has no restriction. On top of that, QloudSI services never
+        offer the schemes in QLOUDSI_FORBIDDEN_SCHEMES, regardless of the Excel.
         """
-        if not product_names:
-            return []
+        base = product.allowed_schemes if product.allowed_schemes else list(MVP_SCHEME_STRINGS)
+        if is_qloudsi_product(product.product_type):
+            base = [s for s in base if s not in QLOUDSI_FORBIDDEN_SCHEMES]
+        return [s for s in MVP_SCHEME_STRINGS if s in base]
 
-        all_products = self.get_products()
-        product_map = {p.name.lower(): p for p in all_products}
+    def get_allowed_schemes_for_product_name(self, product_name: str) -> List[str]:
+        """Resuelve los esquemas permitidos a partir del nombre del producto.
 
-        result: set = set(MVP_SCHEME_STRINGS)
-        for name in product_names:
-            product = product_map.get(name.lower())
-            if product is None or not product.allowed_schemes:
-                # No restriction → contributes all MVP schemes; does not narrow the set
-                product_schemes = set(MVP_SCHEME_STRINGS)
-            else:
-                product_schemes = set(product.allowed_schemes)
-            result &= product_schemes
-            if not result:
-                return []
-
-        return sorted(result, key=lambda s: MVP_SCHEME_STRINGS.index(s) if s in MVP_SCHEME_STRINGS else 999)
+        Producto no encontrado en el portafolio → sin restricción (todos los MVP).
+        """
+        product_map = {p.name.lower(): p for p in self.get_products()}
+        product = product_map.get(product_name.lower())
+        if product is None:
+            return list(MVP_SCHEME_STRINGS)
+        return self.get_allowed_schemes_for_product(product)

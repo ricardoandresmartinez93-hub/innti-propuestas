@@ -5,213 +5,214 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import SchemeSelector from '../components/SchemeSelector'
-import type { ProposalScheme } from '../types'
+import type { SchemeAssignments } from '../components/SchemeSelector'
+import type { PortfolioProduct } from '../types'
 
 afterEach(cleanup)
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const makeProduct = (
+  name: string,
+  productType = 'Plataforma',
+  allowedSchemes?: string[],
+): PortfolioProduct => ({
+  name,
+  product_type: productType,
+  description: `Descripción de ${name}`,
+  business_framework: '',
+  monetization_model: '',
+  pricing_model: '',
+  country: 'Colombia',
+  allowed_schemes: allowedSchemes,
+})
+
+const PLATFORM = makeProduct('Qx-Tránsito', 'Plataforma', [
+  'licensing', 'services', 'support_maintenance',
+])
+const PLATFORM_B = makeProduct('Qx-Recaudo', 'Plataforma', [
+  'licensing', 'services', 'support_maintenance',
+])
+// El backend ya excluye licensing para QloudSI en allowed_schemes
+const QLOUDSI = makeProduct('Innti', 'Servicio QloudSI', ['services', 'support_maintenance'])
+
 // ── Suite ─────────────────────────────────────────────────────────────────────
-describe('SchemeSelector', () => {
-  const mockOnSchemesChanged = vi.fn()
+describe('SchemeSelector (esquema por producto)', () => {
+  const mockOnSelectionChanged = vi.fn()
 
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
   const renderSelector = (
+    products: PortfolioProduct[],
     props: {
-      initialSchemes?: Omit<ProposalScheme, 'id'>[]
+      initialAssignments?: SchemeAssignments
       initialCombine?: boolean
-      allowedSchemes?: string[]
-    } = {}
+    } = {},
   ) =>
     render(
       <SchemeSelector
-        onSchemesChanged={mockOnSchemesChanged}
+        products={products}
+        onSelectionChanged={mockOnSelectionChanged}
         {...props}
       />
     )
 
-  // ── 1. Renderizado inicial ────────────────────────────────────────────────
-  it('renderiza los tres esquemas del MVP', () => {
-    renderSelector()
-    expect(screen.getByText('Licenciamiento')).toBeInTheDocument()
-    expect(screen.getByText('Prestación de Servicios')).toBeInTheDocument()
-    expect(screen.getByText('Soporte y Mantenimiento')).toBeInTheDocument()
+  const lastCall = () => mockOnSelectionChanged.mock.calls.at(-1)!
+
+  // ── 1. Tarjeta por producto ───────────────────────────────────────────────
+  it('renderiza una tarjeta por producto seleccionado', () => {
+    renderSelector([PLATFORM, QLOUDSI])
+    expect(screen.getByTestId('product-card-Qx-Tránsito')).toBeInTheDocument()
+    expect(screen.getByTestId('product-card-Innti')).toBeInTheDocument()
   })
 
-  it('llama a onSchemesChanged al montar con lista vacía', () => {
-    renderSelector()
-    // useEffect se dispara en el primer render con selectedSchemes todos false
-    expect(mockOnSchemesChanged).toHaveBeenCalledWith([], true)
+  it('cada tarjeta muestra solo los esquemas permitidos de SU producto', () => {
+    renderSelector([QLOUDSI])
+    const card = screen.getByTestId('product-card-Innti')
+    expect(card).toHaveTextContent('Prestación de Servicios')
+    expect(card).toHaveTextContent('Soporte y Mantenimiento')
   })
 
-  it('ningún checkbox está marcado por defecto', () => {
-    renderSelector()
-    const checkboxes = screen.getAllByRole('checkbox')
-    checkboxes.forEach((cb) => expect(cb).not.toBeChecked())
+  it('sin productos muestra el aviso de volver al paso anterior', () => {
+    renderSelector([])
+    expect(screen.getByText(/no hay productos seleccionados/i)).toBeInTheDocument()
   })
 
-  // ── 2. Selección de esquemas ──────────────────────────────────────────────
-  it('marcar un checkbox llama a onSchemesChanged con ese esquema', () => {
-    renderSelector()
-    fireEvent.click(screen.getByRole('checkbox', { name: /Licenciamiento/i }))
+  // ── 2. Regla QloudSI ──────────────────────────────────────────────────────
+  it('un producto QloudSI no renderiza la opción Licenciamiento', () => {
+    renderSelector([QLOUDSI])
+    const card = screen.getByTestId('product-card-Innti')
+    const radios = card.querySelectorAll('input[type="radio"]')
+    const values = Array.from(radios).map((r) => (r as HTMLInputElement).value)
+    expect(values).not.toContain('licensing')
+    expect(values).toContain('services')
+  })
 
-    expect(mockOnSchemesChanged).toHaveBeenLastCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({ scheme_type: 'licensing' }),
-      ]),
-      true
+  it('un producto QloudSI muestra la nota de Licenciamiento no disponible', () => {
+    renderSelector([QLOUDSI])
+    expect(
+      screen.getByText('Licenciamiento no disponible para servicios QloudSI')
+    ).toBeInTheDocument()
+  })
+
+  it('QloudSI sin allowed_schemes del backend filtra licensing igual (fallback defensivo)', () => {
+    const qloudsiNoList = makeProduct('Qloudsi Raw', 'Servicio QloudSI', undefined)
+    renderSelector([qloudsiNoList])
+    const card = screen.getByTestId('product-card-Qloudsi Raw')
+    const values = Array.from(card.querySelectorAll('input[type="radio"]')).map(
+      (r) => (r as HTMLInputElement).value
+    )
+    expect(values).not.toContain('licensing')
+  })
+
+  it('una Plataforma sí muestra Licenciamiento y no muestra la nota QloudSI', () => {
+    renderSelector([PLATFORM])
+    const card = screen.getByTestId('product-card-Qx-Tránsito')
+    const values = Array.from(card.querySelectorAll('input[type="radio"]')).map(
+      (r) => (r as HTMLInputElement).value
+    )
+    expect(values).toContain('licensing')
+    expect(
+      screen.queryByText('Licenciamiento no disponible para servicios QloudSI')
+    ).not.toBeInTheDocument()
+  })
+
+  // ── 3. Asignación y completitud ───────────────────────────────────────────
+  it('isComplete es false hasta que TODOS los productos tengan esquema', () => {
+    renderSelector([PLATFORM, QLOUDSI])
+    expect(lastCall()[2]).toBe(false)
+
+    // Asignar esquema solo al primero → sigue incompleto
+    const cardA = screen.getByTestId('product-card-Qx-Tránsito')
+    fireEvent.click(cardA.querySelector('input[value="licensing"]')!)
+    expect(lastCall()[2]).toBe(false)
+
+    // Asignar al segundo → completo
+    const cardB = screen.getByTestId('product-card-Innti')
+    fireEvent.click(cardB.querySelector('input[value="services"]')!)
+    expect(lastCall()[2]).toBe(true)
+  })
+
+  it('emite las asignaciones por nombre de producto', () => {
+    renderSelector([PLATFORM])
+    const card = screen.getByTestId('product-card-Qx-Tránsito')
+    fireEvent.click(card.querySelector('input[value="licensing"]')!)
+
+    const assignments = lastCall()[0] as SchemeAssignments
+    expect(assignments['Qx-Tránsito']).toEqual(
+      expect.objectContaining({ scheme_type: 'licensing', payment_frequency: 'Único' })
     )
   })
 
-  it('desmarcar un checkbox lo elimina de los esquemas activos', () => {
-    renderSelector()
-    const checkbox = screen.getByRole('checkbox', { name: /Licenciamiento/i })
-
-    fireEvent.click(checkbox) // seleccionar
-    fireEvent.click(checkbox) // deseleccionar
-
-    const lastCallSchemes = mockOnSchemesChanged.mock.calls.at(-1)![0]
-    expect(lastCallSchemes).not.toContainEqual(
-      expect.objectContaining({ scheme_type: 'licensing' })
+  it('dos productos pueden tener el mismo tipo de esquema', () => {
+    renderSelector([PLATFORM, PLATFORM_B])
+    fireEvent.click(
+      screen.getByTestId('product-card-Qx-Tránsito').querySelector('input[value="licensing"]')!
     )
+    fireEvent.click(
+      screen.getByTestId('product-card-Qx-Recaudo').querySelector('input[value="licensing"]')!
+    )
+
+    const assignments = lastCall()[0] as SchemeAssignments
+    expect(assignments['Qx-Tránsito'].scheme_type).toBe('licensing')
+    expect(assignments['Qx-Recaudo'].scheme_type).toBe('licensing')
+    expect(lastCall()[2]).toBe(true)
   })
 
-  // ── 3. Frecuencia de pago ─────────────────────────────────────────────────
-  it('muestra los botones de frecuencia al seleccionar un esquema', () => {
-    renderSelector()
-    fireEvent.click(screen.getByRole('checkbox', { name: /Licenciamiento/i }))
+  // ── 4. Frecuencia de pago por producto ────────────────────────────────────
+  it('muestra la frecuencia de pago al asignar un esquema y permite cambiarla', () => {
+    renderSelector([PLATFORM])
+    const card = screen.getByTestId('product-card-Qx-Tránsito')
+    fireEvent.click(card.querySelector('input[value="licensing"]')!)
 
-    // Los tres botones de frecuencia deben aparecer
-    expect(screen.getByRole('button', { name: 'Único' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Mensual' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Anual' })).toBeInTheDocument()
-  })
-
-  it('oculta los botones de frecuencia al deseleccionar el esquema', () => {
-    renderSelector()
-    const checkbox = screen.getByRole('checkbox', { name: /Licenciamiento/i })
-    fireEvent.click(checkbox) // seleccionar
-    fireEvent.click(checkbox) // deseleccionar
-
-    expect(screen.queryByRole('button', { name: 'Único' })).not.toBeInTheDocument()
-  })
-
-  it('cambiar la frecuencia de pago actualiza el callback', () => {
-    renderSelector()
-    fireEvent.click(screen.getByRole('checkbox', { name: /Licenciamiento/i }))
-
-    // Cambia de 'Único' (default) a 'Mensual'
     fireEvent.click(screen.getByRole('button', { name: 'Mensual' }))
 
-    const lastCallSchemes = mockOnSchemesChanged.mock.calls.at(-1)![0]
-    expect(lastCallSchemes).toContainEqual(
-      expect.objectContaining({ scheme_type: 'licensing', payment_frequency: 'Mensual' })
-    )
+    const assignments = lastCall()[0] as SchemeAssignments
+    expect(assignments['Qx-Tránsito'].payment_frequency).toBe('Mensual')
   })
 
-  // ── 4. Combinación de esquemas ────────────────────────────────────────────
-  it('muestra las opciones de combinación al seleccionar 2 o más esquemas', () => {
-    renderSelector()
-    fireEvent.click(screen.getByRole('checkbox', { name: /Licenciamiento/i }))
-    fireEvent.click(screen.getByRole('checkbox', { name: /Prestación de Servicios/i }))
-
-    expect(screen.getByText('Combinar en uno')).toBeInTheDocument()
+  // ── 5. Toggle unificado/separado ──────────────────────────────────────────
+  it('muestra el toggle de documentos con 2 o más productos', () => {
+    renderSelector([PLATFORM, QLOUDSI])
+    expect(screen.getByText('Documento unificado')).toBeInTheDocument()
     expect(screen.getByText('Documentos separados')).toBeInTheDocument()
   })
 
-  it('no muestra las opciones de combinación con un solo esquema seleccionado', () => {
-    renderSelector()
-    fireEvent.click(screen.getByRole('checkbox', { name: /Licenciamiento/i }))
-
-    expect(screen.queryByText('Combinar en uno')).not.toBeInTheDocument()
+  it('no muestra el toggle con un solo producto', () => {
+    renderSelector([PLATFORM])
+    expect(screen.queryByText('Documento unificado')).not.toBeInTheDocument()
+    expect(screen.queryByText('Documentos separados')).not.toBeInTheDocument()
   })
 
-  it('cambiar a "Documentos separados" pasa combineSchemes=false', () => {
-    renderSelector()
-    fireEvent.click(screen.getByRole('checkbox', { name: /Licenciamiento/i }))
-    fireEvent.click(screen.getByRole('checkbox', { name: /Prestación de Servicios/i }))
-
+  it('cambiar a "Documentos separados" emite combineSchemes=false', () => {
+    renderSelector([PLATFORM, QLOUDSI])
     fireEvent.click(screen.getByText('Documentos separados'))
-
-    const lastCall = mockOnSchemesChanged.mock.calls.at(-1)!
-    expect(lastCall[1]).toBe(false) // combineSchemes
+    expect(lastCall()[1]).toBe(false)
   })
 
-  // ── 5. Inicialización con props ───────────────────────────────────────────
-  it('inicializa con los esquemas proporcionados en initialSchemes', () => {
-    const initialSchemes: Omit<ProposalScheme, 'id'>[] = [
-      { scheme_type: 'licensing', payment_frequency: 'Único' },
-    ]
-    renderSelector({ initialSchemes })
-
-    const checkbox = screen.getByRole('checkbox', { name: /Licenciamiento/i })
-    expect(checkbox).toBeChecked()
+  it('con un solo producto siempre emite combineSchemes=true', () => {
+    renderSelector([PLATFORM], { initialCombine: false })
+    expect(lastCall()[1]).toBe(true)
   })
 
-  it('inicializa con initialCombine=false cuando se especifica', () => {
-    const initialSchemes: Omit<ProposalScheme, 'id'>[] = [
-      { scheme_type: 'licensing', payment_frequency: 'Único' },
-      { scheme_type: 'services', payment_frequency: 'Mensual' },
-    ]
-    renderSelector({ initialSchemes, initialCombine: false })
-
-    // Con 2+ esquemas las opciones de combinación son visibles
-    expect(screen.getByText('Combinar en uno')).toBeInTheDocument()
-    // El segundo botón (Documentos separados) debe tener el estilo activo
-    // Solo verificamos que existe el botón (la lógica visual es de estilos CSS)
-    expect(screen.getByText('Documentos separados')).toBeInTheDocument()
+  // ── 6. Inicialización y aviso de intersección eliminado ──────────────────
+  it('inicializa con asignaciones previas', () => {
+    renderSelector([PLATFORM], {
+      initialAssignments: {
+        'Qx-Tránsito': { scheme_type: 'licensing', payment_frequency: 'Único' },
+      },
+    })
+    const card = screen.getByTestId('product-card-Qx-Tránsito')
+    expect(card.querySelector('input[value="licensing"]')).toBeChecked()
+    expect(lastCall()[2]).toBe(true)
   })
 
-  // ── 6. allowedSchemes — filtrado por producto ─────────────────────────────
-  describe('allowedSchemes', () => {
-    it('sin allowedSchemes muestra todos los esquemas de SCHEME_LABELS', () => {
-      renderSelector()
-      // Los tres MVP visibles
-      expect(screen.getByText('Licenciamiento')).toBeInTheDocument()
-      expect(screen.getByText('Prestación de Servicios')).toBeInTheDocument()
-      expect(screen.getByText('Soporte y Mantenimiento')).toBeInTheDocument()
-    })
-
-    it('con allowedSchemes solo muestra los esquemas incluidos', () => {
-      renderSelector({ allowedSchemes: ['licensing'] })
-      expect(screen.getByText('Licenciamiento')).toBeInTheDocument()
-      expect(screen.queryByText('Prestación de Servicios')).not.toBeInTheDocument()
-      expect(screen.queryByText('Soporte y Mantenimiento')).not.toBeInTheDocument()
-    })
-
-    it('muestra el badge "Filtrado por productos seleccionados" cuando hay restricción', () => {
-      renderSelector({ allowedSchemes: ['licensing'] })
-      expect(screen.getByText(/Filtrado por productos seleccionados/i)).toBeInTheDocument()
-    })
-
-    it('no muestra el badge cuando allowedSchemes no está definido', () => {
-      renderSelector()
-      expect(screen.queryByText(/Filtrado por productos seleccionados/i)).not.toBeInTheDocument()
-    })
-
-    it('allowedSchemes con todos los MVP schemes no oculta ningún esquema MVP', () => {
-      renderSelector({ allowedSchemes: ['licensing', 'services', 'support_maintenance'] })
-      expect(screen.getByText('Licenciamiento')).toBeInTheDocument()
-      expect(screen.getByText('Prestación de Servicios')).toBeInTheDocument()
-      expect(screen.getByText('Soporte y Mantenimiento')).toBeInTheDocument()
-    })
-
-    it('con allowedSchemes vacío muestra el aviso de productos incompatibles', () => {
-      renderSelector({ allowedSchemes: [] })
-      expect(screen.queryByText('Licenciamiento')).not.toBeInTheDocument()
-      expect(screen.queryByText('Prestación de Servicios')).not.toBeInTheDocument()
-      expect(screen.queryByText('Soporte y Mantenimiento')).not.toBeInTheDocument()
-      expect(screen.getByText(/no comparten ningún esquema comercial/i)).toBeInTheDocument()
-    })
-
-    it('se puede seleccionar un esquema dentro de allowedSchemes', () => {
-      renderSelector({ allowedSchemes: ['licensing', 'services'] })
-      fireEvent.click(screen.getByRole('checkbox', { name: /Licenciamiento/i }))
-      expect(mockOnSchemesChanged).toHaveBeenLastCalledWith(
-        expect.arrayContaining([expect.objectContaining({ scheme_type: 'licensing' })]),
-        true
-      )
-    })
+  it('ya no existe el aviso de "no comparten ningún esquema comercial"', () => {
+    renderSelector([PLATFORM, QLOUDSI])
+    expect(
+      screen.queryByText(/no comparten ningún esquema comercial/i)
+    ).not.toBeInTheDocument()
   })
 })

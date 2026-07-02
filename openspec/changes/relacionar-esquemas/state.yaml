@@ -1,0 +1,16 @@
+change: relacionar-esquemas
+status: applied
+date: 2026-07-02
+
+phases_completed:
+  - proposal
+  - spec
+  - design
+  - tasks
+  - apply
+  - verify
+
+verification:
+  backend_tests: 317 passed
+  frontend_tests: 132 passed
+  migration: executed on dev DB (8 schemes linked, 3 legacy proposals reported)

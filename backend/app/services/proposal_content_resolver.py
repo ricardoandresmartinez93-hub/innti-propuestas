@@ -62,32 +62,51 @@ def resolve_scheme_content(proposal: Proposal, scheme: ProposalScheme) -> dict:
     }
 
 
+def _scheme_payload(scheme: ProposalScheme, content: dict) -> dict:
+    """Arma el dict de bloque que consume el renderizador combinado."""
+    return {
+        "scheme_type": scheme.scheme_type.value if hasattr(scheme.scheme_type, "value") else str(scheme.scheme_type),
+        "scheme_id": scheme.id,
+        "payment_frequency": scheme.payment_frequency,
+        "scope_text": content["scope_text"],
+        "validity_period": content["validity_period"],
+        "economic_conditions": content["economic_conditions"],
+        "payment_terms": content["payment_terms"],
+        "excluded_services_text": content["excluded_services_text"],
+        "ip_section_text": content["ip_section_text"],
+    }
+
+
 def resolve_combined_content(proposal: Proposal) -> dict:
     """Devuelve el contenido para el modo combinado (un único documento).
 
-    Cada sección que varía por esquema se devuelve como una lista de
-    (scheme_type, contenido_efectivo), preservando el orden de esquemas
-    en la propuesta. Las secciones globales se devuelven como strings.
+    Modelo nuevo (uses_product_schemes): un bloque POR PRODUCTO, en el orden de
+    los productos de la propuesta; cada bloque incluye "product_name" para que
+    el renderizador titule «PRODUCTO — ESQUEMA» y liste solo ese producto.
+
+    Propuestas legadas: un bloque por esquema (sin "product_name"), preservando
+    el comportamiento anterior.
     """
-    per_scheme = [(s, resolve_scheme_content(proposal, s)) for s in proposal.schemes]
+    if proposal.uses_product_schemes:
+        blocks = []
+        for product in proposal.products:
+            scheme = product.scheme
+            if scheme is None:
+                continue
+            content = resolve_scheme_content(proposal, scheme)
+            payload = _scheme_payload(scheme, content)
+            payload["product_name"] = product.product_name
+            blocks.append(payload)
+    else:
+        blocks = [
+            _scheme_payload(s, resolve_scheme_content(proposal, s))
+            for s in proposal.schemes
+        ]
 
     return {
         # Globales
         "context_text": proposal.context_content or "",
         "letter_text": proposal.letter_content or "",
-        # Por esquema (lista de pares para el renderizador combinado)
-        "schemes": [
-            {
-                "scheme_type": s.scheme_type.value if hasattr(s.scheme_type, "value") else str(s.scheme_type),
-                "scheme_id": s.id,
-                "payment_frequency": s.payment_frequency,
-                "scope_text": content["scope_text"],
-                "validity_period": content["validity_period"],
-                "economic_conditions": content["economic_conditions"],
-                "payment_terms": content["payment_terms"],
-                "excluded_services_text": content["excluded_services_text"],
-                "ip_section_text": content["ip_section_text"],
-            }
-            for s, content in per_scheme
-        ],
+        # Bloques por producto (modelo nuevo) o por esquema (legado)
+        "schemes": blocks,
     }
