@@ -9,8 +9,13 @@ services:
       # a reinicios/recreaciones del contenedor. Esta variable tiene prioridad
       # sobre la definida en .env.
       - DATABASE_URL=sqlite:////app/data/innti_propuestas.db
+      # El Excel del portafolio vive en la raiz del proyecto, fuera del contexto
+      # de build del backend, por lo que no entra en la imagen. Se monta como
+      # volumen y se apunta con ruta absoluta para que el contenedor lo encuentre.
+      - PORTFOLIO_FILE_PATH=/app/ListaPortafolio.xlsx
     volumes:
       - sqlite_data:/app/data
+      - ./ListaPortafolio.xlsx:/app/ListaPortafolio.xlsx:ro
     env_file:
       - ./backend/.env
     ports:
