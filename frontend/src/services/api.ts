@@ -9,6 +9,7 @@ import type {
   ProposalScheme,
   ProposalSchemeUpdate,
   ProposalStats,
+  ProposalStatus,
   Client,
   ClientCreate,
   Approval,
